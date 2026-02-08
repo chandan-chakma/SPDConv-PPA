@@ -1,14 +1,15 @@
 import math
+from functools import partial
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from functools import partial
 from einops import rearrange
-from timm.models.layers import DropPath
 from timm.models._efficientnet_blocks import SqueezeExcite as SE
-import torch
-
+from timm.models.layers import DropPath
 
 # 参考文献: https://arxiv.org/pdf/2301.01146
+
 
 class LayerNorm2d(nn.Module):
     # 自定义二维层归一化类
@@ -19,37 +20,51 @@ class LayerNorm2d(nn.Module):
 
     def forward(self, x):
         # 将输入张量从 (B, C, H, W) 重新排列为 (B, H, W, C)
-        x = rearrange(x, 'b c h w -> b h w c').contiguous()
+        x = rearrange(x, "b c h w -> b h w c").contiguous()
         # 进行归一化
         x = self.norm(x)
         # 再次排列回 (B, C, H, W)
-        x = rearrange(x, 'b h w c -> b c h w').contiguous()
+        x = rearrange(x, "b h w c -> b c h w").contiguous()
         return x
 
-def get_norm(norm_layer='in_1d'):
+
+def get_norm(norm_layer="in_1d"):
     # 根据输入获取归一化层
     eps = 1e-6
     norm_dict = {
-        'none': nn.Identity,
-        'in_1d': partial(nn.InstanceNorm1d, eps=eps),
-        'in_2d': partial(nn.InstanceNorm2d, eps=eps),
-        'in_3d': partial(nn.InstanceNorm3d, eps=eps),
-        'bn_1d': partial(nn.BatchNorm1d, eps=eps),
-        'bn_2d': partial(nn.BatchNorm2d, eps=eps),
+        "none": nn.Identity,
+        "in_1d": partial(nn.InstanceNorm1d, eps=eps),
+        "in_2d": partial(nn.InstanceNorm2d, eps=eps),
+        "in_3d": partial(nn.InstanceNorm3d, eps=eps),
+        "bn_1d": partial(nn.BatchNorm1d, eps=eps),
+        "bn_2d": partial(nn.BatchNorm2d, eps=eps),
         # 'bn_2d': partial(nn.SyncBatchNorm, eps=eps),
-        'bn_3d': partial(nn.BatchNorm3d, eps=eps),
-        'gn': partial(nn.GroupNorm, eps=eps),
-        'ln_1d': partial(nn.LayerNorm, eps=eps),
-        'ln_2d': partial(LayerNorm2d, eps=eps),
+        "bn_3d": partial(nn.BatchNorm3d, eps=eps),
+        "gn": partial(nn.GroupNorm, eps=eps),
+        "ln_1d": partial(nn.LayerNorm, eps=eps),
+        "ln_2d": partial(LayerNorm2d, eps=eps),
     }
     return norm_dict[norm_layer]
 
 
 class ConvNormAct(nn.Module):
     # 卷积 + 归一化 + 激活类
-    def __init__(self, dim_in, dim_out, kernel_size, stride=1, dilation=1, groups=1, bias=False,
-                 skip=False, norm_layer='bn_2d', act_layer='relu', inplace=True, drop_path_rate=0.):
-        super(ConvNormAct, self).__init__()
+    def __init__(
+        self,
+        dim_in,
+        dim_out,
+        kernel_size,
+        stride=1,
+        dilation=1,
+        groups=1,
+        bias=False,
+        skip=False,
+        norm_layer="bn_2d",
+        act_layer="relu",
+        inplace=True,
+        drop_path_rate=0.0,
+    ):
+        super().__init__()
         # 是否使用跳跃连接
         self.has_skip = skip and dim_in == dim_out
         # 计算填充大小
@@ -78,28 +93,49 @@ class ConvNormAct(nn.Module):
         return x
 
 
-def get_act(act_layer='relu'):
+def get_act(act_layer="relu"):
     # 根据输入获取激活函数
     act_dict = {
-        'none': nn.Identity,
-        'sigmoid': nn.Sigmoid,
-        'mish': nn.Mish,
-        'tanh': nn.Tanh,
-        'relu': nn.ReLU,
-        'relu6': nn.ReLU6,
-        'prelu': nn.PReLU,
-        'gelu': nn.GELU,
-        'silu': nn.SiLU
+        "none": nn.Identity,
+        "sigmoid": nn.Sigmoid,
+        "mish": nn.Mish,
+        "tanh": nn.Tanh,
+        "relu": nn.ReLU,
+        "relu6": nn.ReLU6,
+        "prelu": nn.PReLU,
+        "gelu": nn.GELU,
+        "silu": nn.SiLU,
     }
     return act_dict[act_layer]
 
 
 class iRMB(nn.Module):
     # 自定义iRMB类
-    def __init__(self, dim_in, dim_out, norm_in=True, has_skip=True, exp_ratio=1.0, norm_layer='bn_2d',
-                 act_layer='relu', v_proj=True, dw_ks=3, stride=1, dilation=1, se_ratio=0.0, dim_head=64, window_size=7,
-                 attn_s=True, qkv_bias=False, attn_drop=0., drop=0., drop_path=0., v_group=False, attn_pre=False,
-                 inplace=True):
+    def __init__(
+        self,
+        dim_in,
+        dim_out,
+        norm_in=True,
+        has_skip=True,
+        exp_ratio=1.0,
+        norm_layer="bn_2d",
+        act_layer="relu",
+        v_proj=True,
+        dw_ks=3,
+        stride=1,
+        dilation=1,
+        se_ratio=0.0,
+        dim_head=64,
+        window_size=7,
+        attn_s=True,
+        qkv_bias=False,
+        attn_drop=0.0,
+        drop=0.0,
+        drop_path=0.0,
+        v_group=False,
+        attn_pre=False,
+        inplace=True,
+    ):
         super().__init__()
         # 根据输入决定是否使用归一化
         self.norm = get_norm(norm_layer)(dim_in) if norm_in else nn.Identity()
@@ -110,36 +146,61 @@ class iRMB(nn.Module):
         self.attn_s = attn_s
         if self.attn_s:
             # 确保输入维度可被头数整除
-            assert dim_in % dim_head == 0, 'dim should be divisible by num_heads'
+            assert dim_in % dim_head == 0, "dim should be divisible by num_heads"
             self.dim_head = dim_head
             self.window_size = window_size
             self.num_head = dim_in // dim_head
-            self.scale = self.dim_head ** -0.5
+            self.scale = self.dim_head**-0.5
             self.attn_pre = attn_pre
             # 定义查询和键的卷积层
-            self.qk = ConvNormAct(dim_in, int(dim_in * 2), kernel_size=1, bias=qkv_bias, norm_layer='none',
-                                  act_layer='none')
+            self.qk = ConvNormAct(
+                dim_in, int(dim_in * 2), kernel_size=1, bias=qkv_bias, norm_layer="none", act_layer="none"
+            )
             # 定义值的卷积层
-            self.v = ConvNormAct(dim_in, dim_mid, kernel_size=1, groups=self.num_head if v_group else 1, bias=qkv_bias,
-                                 norm_layer='none', act_layer=act_layer, inplace=inplace)
+            self.v = ConvNormAct(
+                dim_in,
+                dim_mid,
+                kernel_size=1,
+                groups=self.num_head if v_group else 1,
+                bias=qkv_bias,
+                norm_layer="none",
+                act_layer=act_layer,
+                inplace=inplace,
+            )
             self.attn_drop = nn.Dropout(attn_drop)
         else:
             if v_proj:
                 # 如果需要，定义值的卷积层
-                self.v = ConvNormAct(dim_in, dim_mid, kernel_size=1, bias=qkv_bias, norm_layer='none',
-                                     act_layer=act_layer, inplace=inplace)
+                self.v = ConvNormAct(
+                    dim_in,
+                    dim_mid,
+                    kernel_size=1,
+                    bias=qkv_bias,
+                    norm_layer="none",
+                    act_layer=act_layer,
+                    inplace=inplace,
+                )
             else:
                 # 否则，使用身份映射
                 self.v = nn.Identity()  # 返回输入的原样输出，即不对输入进行任何操作或修改。
         # 定义局部卷积层
-        self.conv_local = ConvNormAct(dim_mid, dim_mid, kernel_size=dw_ks, stride=stride, dilation=dilation,
-                                      groups=dim_mid, norm_layer='bn_2d', act_layer='silu', inplace=inplace)
+        self.conv_local = ConvNormAct(
+            dim_mid,
+            dim_mid,
+            kernel_size=dw_ks,
+            stride=stride,
+            dilation=dilation,
+            groups=dim_mid,
+            norm_layer="bn_2d",
+            act_layer="silu",
+            inplace=inplace,
+        )
         # 定义Squeeze-Excite层
         self.se = SE(dim_mid, rd_ratio=se_ratio, act_layer=get_act(act_layer)) if se_ratio > 0.0 else nn.Identity()
 
         self.proj_drop = nn.Dropout(drop)
         # 定义投影层
-        self.proj = ConvNormAct(dim_mid, dim_out, kernel_size=1, norm_layer='none', act_layer='none', inplace=inplace)
+        self.proj = ConvNormAct(dim_mid, dim_out, kernel_size=1, norm_layer="none", act_layer="none", inplace=inplace)
         self.drop_path = DropPath(drop_path) if drop_path else nn.Identity()
 
     def forward(self, x):
@@ -147,7 +208,7 @@ class iRMB(nn.Module):
         shortcut = x
         # 执行归一化
         x = self.norm(x)
-        B, C, H, W = x.shape
+        _B, _C, H, W = x.shape
         if self.attn_s:
             # 进行填充以满足窗口大小
             # 判断窗口大小，如果小于等于0，则使用输入张量的宽度和高度作为窗口大小
@@ -161,20 +222,35 @@ class iRMB(nn.Module):
             pad_r = (window_size_W - W % window_size_W) % window_size_W  # 右侧填充量
             pad_b = (window_size_H - H % window_size_H) % window_size_H  # 底部填充量
             # 填充输入张量，按照顺序填充左、右、上、下
-            x = F.pad(x, (pad_l, pad_r, pad_t, pad_b, 0, 0,))
+            x = F.pad(
+                x,
+                (
+                    pad_l,
+                    pad_r,
+                    pad_t,
+                    pad_b,
+                    0,
+                    0,
+                ),
+            )
             # 计算填充后，每个窗口将包含的块数
             n1, n2 = (H + pad_b) // window_size_H, (W + pad_r) // window_size_W
             # 重新排列输入张量，将其形状调整为适合后续操作的形式
-            x = rearrange(x, 'b c (h1 n1) (w1 n2) -> (b n1 n2) c h1 w1', n1=n1, n2=n2).contiguous()
+            x = rearrange(x, "b c (h1 n1) (w1 n2) -> (b n1 n2) c h1 w1", n1=n1, n2=n2).contiguous()
             # 注意力计算
             # 获取输入张量的形状，b 为批量大小，c 为通道数，h 为高度，w 为宽度
-            b, c, h, w = x.shape
+            _b, _c, h, w = x.shape
             # 使用 qk 线性层处理输入张量 x，得到 qk
             qk = self.qk(x)
             # 重新排列 qk 张量的维度
             # 将 qk 的形状调整为 (qk, b, heads, h*w, dim_head)，其中 qk 为 2，表示查询和键
-            qk = rearrange(qk, 'b (qk heads dim_head) h w -> qk b heads (h w) dim_head', qk=2, heads=self.num_head,
-                           dim_head=self.dim_head).contiguous()
+            qk = rearrange(
+                qk,
+                "b (qk heads dim_head) h w -> qk b heads (h w) dim_head",
+                qk=2,
+                heads=self.num_head,
+                dim_head=self.dim_head,
+            ).contiguous()
             # 将查询和键分开
             q, k = qk[0], qk[1]
             # 计算空间注意力
@@ -184,22 +260,26 @@ class iRMB(nn.Module):
             attn_spa = attn_spa.softmax(dim=-1)
             # 应用 dropout，防止过拟合
             attn_spa = self.attn_drop(attn_spa)
-            if self.attn_pre: # 前处理注意力是在计算注意力之前进行特征优化，而后处理注意力则是在计算注意力之后对特征进行加权处理
+            if (
+                self.attn_pre
+            ):  # 前处理注意力是在计算注意力之前进行特征优化，而后处理注意力则是在计算注意力之后对特征进行加权处理
                 # 前处理注意力
-                x = rearrange(x, 'b (heads dim_head) h w -> b heads (h w) dim_head', heads=self.num_head).contiguous()
+                x = rearrange(x, "b (heads dim_head) h w -> b heads (h w) dim_head", heads=self.num_head).contiguous()
                 x_spa = attn_spa @ x
-                x_spa = rearrange(x_spa, 'b heads (h w) dim_head -> b (heads dim_head) h w', heads=self.num_head, h=h,
-                                  w=w).contiguous()
+                x_spa = rearrange(
+                    x_spa, "b heads (h w) dim_head -> b (heads dim_head) h w", heads=self.num_head, h=h, w=w
+                ).contiguous()
                 x_spa = self.v(x_spa)
             else:
                 # 后处理注意力
                 v = self.v(x)
-                v = rearrange(v, 'b (heads dim_head) h w -> b heads (h w) dim_head', heads=self.num_head).contiguous()
+                v = rearrange(v, "b (heads dim_head) h w -> b heads (h w) dim_head", heads=self.num_head).contiguous()
                 x_spa = attn_spa @ v
-                x_spa = rearrange(x_spa, 'b heads (h w) dim_head -> b (heads dim_head) h w', heads=self.num_head, h=h,
-                                  w=w).contiguous()
+                x_spa = rearrange(
+                    x_spa, "b heads (h w) dim_head -> b (heads dim_head) h w", heads=self.num_head, h=h, w=w
+                ).contiguous()
             # 去填充
-            x = rearrange(x_spa, '(b n1 n2) c h1 w1 -> b c (h1 n1) (w1 n2)', n1=n1, n2=n2).contiguous()
+            x = rearrange(x_spa, "(b n1 n2) c h1 w1 -> b c (h1 n1) (w1 n2)", n1=n1, n2=n2).contiguous()
             if pad_r > 0 or pad_b > 0:
                 # 截断到原始尺寸
                 x = x[:, :, :H, :W].contiguous()
@@ -216,6 +296,7 @@ class iRMB(nn.Module):
         x = (shortcut + self.drop_path(x)) if self.has_skip else x
         return x
 
+
 class Bottleneck_iRMB(nn.Module):
     """Standard bottleneck."""
 
@@ -224,13 +305,12 @@ class Bottleneck_iRMB(nn.Module):
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, k[0], 1)
-        self.cv2 = iRMB(c_,c2)
+        self.cv2 = iRMB(c_, c2)
         self.add = shortcut and c1 == c2
 
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
-
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -240,6 +320,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
+
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
@@ -271,7 +352,9 @@ class C2f_iRMB(nn.Module):
         self.c = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
-        self.m = nn.ModuleList(Bottleneck_iRMB(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+        self.m = nn.ModuleList(
+            Bottleneck_iRMB(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n)
+        )
 
     def forward(self, x):
         """Forward pass through C2f layer."""
@@ -285,17 +368,16 @@ class C2f_iRMB(nn.Module):
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
 
-if __name__ =='__main__':
 
-    SAFM = iRMB(256,128)
-    #创建一个输入张量
+if __name__ == "__main__":
+    SAFM = iRMB(256, 128)
+    # 创建一个输入张量
     batch_size = 1
-    input_tensor=torch.randn(batch_size, 256, 64, 64 )
-    #运行模型并打印输入和输出的形状
-    output_tensor =SAFM(input_tensor)
-    print("Input shape:",input_tensor.shape)
-    print("0utput shape:",output_tensor.shape)
-
+    input_tensor = torch.randn(batch_size, 256, 64, 64)
+    # 运行模型并打印输入和输出的形状
+    output_tensor = SAFM(input_tensor)
+    print("Input shape:", input_tensor.shape)
+    print("0utput shape:", output_tensor.shape)
 
 
 # # Ultralytics YOLO 🚀, AGPL-3.0 license

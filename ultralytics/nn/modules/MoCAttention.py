@@ -1,14 +1,16 @@
-import math
-import numpy as np
-from typing import Any, Callable
-from typing import Union, Optional
-import torch
-from torch import nn, Tensor
+from __future__ import annotations
 
-from ultralytics.nn.modules.conv import LightConv
+import math
+from typing import Any, Callable
+
+import numpy as np
+import torch
+from torch import Tensor, nn
+
 
 def pair(Val):
     return Val if isinstance(Val, (tuple, list)) else (Val, Val)
+
 
 NormLayerTuple = (
     nn.BatchNorm1d,
@@ -20,6 +22,7 @@ NormLayerTuple = (
     nn.GroupNorm,
     nn.BatchNorm3d,
 )
+
 
 def initWeight(Module):
     # init conv, norm , and linear layers
@@ -54,30 +57,31 @@ def initWeight(Module):
         for m in Module.children():
             initWeight(m)
 
+
 class BaseConv2d(nn.Module):
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
         kernel_size: int,
-        stride: Optional[int]=1,
-        padding: Optional[int]=None,
-        groups: Optional[int]=1,
-        bias: Optional[bool]=None,
-        BNorm: bool=False,
+        stride: int | None = 1,
+        padding: int | None = None,
+        groups: int | None = 1,
+        bias: bool | None = None,
+        BNorm: bool = False,
         # norm_layer: Optional[Callable[..., nn.Module]]=nn.BatchNorm2d,
-        ActLayer: Optional[Callable[..., nn.Module]]=None,
-        dilation: int=1,
-        Momentum: Optional[float]=0.1,
-        **kwargs: Any
+        ActLayer: Callable[..., nn.Module] | None = None,
+        dilation: int = 1,
+        Momentum: float | None = 0.1,
+        **kwargs: Any,
     ) -> None:
-        super(BaseConv2d, self).__init__()
+        super().__init__()
         if padding is None:
             padding = int((kernel_size - 1) // 2 * dilation)
-            
+
         if bias is None:
             bias = not BNorm
-        
+
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.kernel_size = kernel_size
@@ -85,22 +89,21 @@ class BaseConv2d(nn.Module):
         self.padding = padding
         self.groups = groups
         self.bias = bias
-        
-        self.Conv = nn.Conv2d(in_channels, out_channels, 
-                              kernel_size, stride, padding, dilation, groups, bias, **kwargs)
-        
+
+        self.Conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, **kwargs)
+
         self.Bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=Momentum) if BNorm else nn.Identity()
-        
+
         if ActLayer is not None:
-            if isinstance(list(ActLayer().named_modules())[0][1], nn.Sigmoid):
+            if isinstance(next(iter(ActLayer().named_modules()))[1], nn.Sigmoid):
                 self.Act = ActLayer()
             else:
                 self.Act = ActLayer(inplace=True)
         else:
             self.Act = ActLayer
-        
+
         self.apply(initWeight)
-        
+
     def forward(self, x: Tensor) -> Tensor:
         x = self.Conv(x)
         x = self.Bn(x)
@@ -110,10 +113,10 @@ class BaseConv2d(nn.Module):
 
     def profileModule(self, Input: Tensor):
         if Input.dim() != 4:
-            print('Conv2d requires 4-dimensional Input (BxCxHxW). Provided Input has shape: {}'.format(Input.size()))
+            print(f"Conv2d requires 4-dimensional Input (BxCxHxW). Provided Input has shape: {Input.size()}")
 
         BatchSize, in_channels, in_h, in_w = Input.size()
-        assert in_channels == self.in_channels, '{}!={}'.format(in_channels, self.in_channels)
+        assert in_channels == self.in_channels, f"{in_channels}!={self.in_channels}"
 
         k_h, k_w = pair(self.kernel_size)
         stride_h, stride_w = pair(self.stride)
@@ -139,17 +142,19 @@ class BaseConv2d(nn.Module):
 
 
 class AdaptiveAvgPool2d(nn.AdaptiveAvgPool2d):
-    def __init__(self, output_size: Union[int, tuple]=1):
-        super(AdaptiveAvgPool2d, self).__init__(output_size=output_size)
+    def __init__(self, output_size: int | tuple = 1):
+        super().__init__(output_size=output_size)
 
     def profileModule(self, Input: Tensor):
         Output = self.forward(Input)
-        return Output, 0.0, 0.0   
+        return Output, 0.0, 0.0
+
 
 def setMethod(self, ElementName, ElementValue):
     return setattr(self, ElementName, ElementValue)
 
-def shuffleTensor(Feature: Tensor, Mode: int=1) -> Tensor:
+
+def shuffleTensor(Feature: Tensor, Mode: int = 1) -> Tensor:
     # shuffle multiple tensors with the same indexs
     # all tensors must have the same shape
     if isinstance(Feature, Tensor):
@@ -170,22 +175,21 @@ def shuffleTensor(Feature: Tensor, Mode: int=1) -> Tensor:
         else:
             # shuflle along y and then x axis
             if Indexs is None:
-                Indexs = [torch.randperm(H, device=f.device), 
-                          torch.randperm(W, device=f.device)]
+                Indexs = [torch.randperm(H, device=f.device), torch.randperm(W, device=f.device)]
             f = f[:, :, Indexs[0].to(f.device)]
             f = f[:, :, :, Indexs[1].to(f.device)]
         Output.append(f)
     return Output
 
+
 def callMethod(self, ElementName):
     return getattr(self, ElementName)
 
-def makeDivisible(v: float, divisor: int, min_value: Optional[int] = None) -> int:
-    """
-    This function is taken from the original tf repo.
-    It ensures that all layers have a channel number that is divisible by 8
-    It can be seen here:
-    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.Py
+
+def makeDivisible(v: float, divisor: int, min_value: int | None = None) -> int:
+    """This function is taken from the original tf repo. It ensures that all layers have a channel number that is
+    divisible by 8 It can be seen
+    here: https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.Py.
     """
     if min_value is None:
         min_value = divisor
@@ -195,53 +199,55 @@ def makeDivisible(v: float, divisor: int, min_value: Optional[int] = None) -> in
         new_v += divisor
     return new_v
 
+
 class MoCAttention(nn.Module):
     # Monte carlo attention
     def __init__(
         self,
         InChannels: int,
-        HidChannels: int=None,
-        SqueezeFactor: int=4,
-        PoolRes: list=[1, 2, 3],
-        Act: Callable[..., nn.Module]=nn.ReLU,
-        ScaleAct: Callable[..., nn.Module]=nn.Sigmoid,
-        MoCOrder: bool=True,
+        HidChannels: int | None = None,
+        SqueezeFactor: int = 4,
+        PoolRes: list = [1, 2, 3],
+        Act: Callable[..., nn.Module] = nn.ReLU,
+        ScaleAct: Callable[..., nn.Module] = nn.Sigmoid,
+        MoCOrder: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__()
         if HidChannels is None:
             HidChannels = max(makeDivisible(InChannels // SqueezeFactor, 8), 32)
-        
-        AllPoolRes = PoolRes + [1] if 1 not in PoolRes else PoolRes
+
+        AllPoolRes = [*PoolRes, 1] if 1 not in PoolRes else PoolRes
         for k in AllPoolRes:
             Pooling = AdaptiveAvgPool2d(k)
-            setMethod(self, 'Pool%d' % k, Pooling)
-            
+            setMethod(self, "Pool%d" % k, Pooling)
+
         self.SELayer = nn.Sequential(
             BaseConv2d(InChannels, HidChannels, 1, ActLayer=Act),
             BaseConv2d(HidChannels, InChannels, 1, ActLayer=ScaleAct),
         )
-        
+
         self.PoolRes = PoolRes
         self.MoCOrder = MoCOrder
-        
+
     def monteCarloSample(self, x: Tensor) -> Tensor:
         if self.training:
             PoolKeep = np.random.choice(self.PoolRes)
             x1 = shuffleTensor(x)[0] if self.MoCOrder else x
-            AttnMap: Tensor = callMethod(self, 'Pool%d' % PoolKeep)(x1)
+            AttnMap: Tensor = callMethod(self, "Pool%d" % PoolKeep)(x1)
             if AttnMap.shape[-1] > 1:
                 AttnMap = AttnMap.flatten(2)
                 AttnMap = AttnMap[:, :, torch.randperm(AttnMap.shape[-1])[0]]
-                AttnMap = AttnMap[:, :, None, None] # squeeze twice
+                AttnMap = AttnMap[:, :, None, None]  # squeeze twice
         else:
-            AttnMap: Tensor = callMethod(self, 'Pool%d' % 1)(x)
-            
+            AttnMap: Tensor = callMethod(self, "Pool%d" % 1)(x)
+
         return AttnMap
-        
+
     def forward(self, x: Tensor) -> Tensor:
         AttnMap = self.monteCarloSample(x)
         return x * self.SELayer(AttnMap)
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -250,31 +256,32 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
- 
- 
+
+
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
- 
+
     default_act = nn.SiLU()  # default activation
- 
+
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
         super().__init__()
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
         self.bn = nn.BatchNorm2d(c2)
         self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
- 
+
     def forward(self, x):
         """Apply convolution, batch normalization and activation to input tensor."""
         return self.act(self.bn(self.conv(x)))
- 
+
     def forward_fuse(self, x):
         """Perform transposed convolution of 2D data."""
         return self.act(self.conv(x))
 
+
 class Bottleneck(nn.Module):
     """Standard bottleneck."""
- 
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
@@ -282,15 +289,15 @@ class Bottleneck(nn.Module):
         self.cv1 = Conv(c1, c_, k[0], 1)
         self.cv2 = MoCAttention(c2)
         self.add = shortcut and c1 == c2
- 
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
-    
- 
+
+
 class C2f_MoCA(nn.Module):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
- 
+
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         """Initializes a CSP bottleneck with 2 convolutions and n Bottleneck blocks for faster processing."""
         super().__init__()
@@ -298,21 +305,15 @@ class C2f_MoCA(nn.Module):
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
- 
+
     def forward(self, x):
         """Forward pass through C2f layer."""
         y = list(self.cv1(x).chunk(2, 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
- 
+
     def forward_split(self, x):
         """Forward pass using split() instead of chunk()."""
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
-
-
-
-
-
