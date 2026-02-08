@@ -3,7 +3,7 @@ val: ../valid/images
 test: ../test/images
 
 nc: 4
-names: ['bus', 'car', 'truck', 'van']
+names: ["bus", "car", "truck", "van"]
 
 roboflow:
   workspace: uavdt

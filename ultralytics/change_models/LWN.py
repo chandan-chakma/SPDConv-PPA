@@ -1,19 +1,22 @@
-import torch
-from torch import nn
+from __future__ import annotations
+
+from collections.abc import Sequence
+
 import pywt
-from typing import Sequence, Tuple, Union, List
-from einops import rearrange, repeat
+import torch
 import torch.nn.functional as F
+from einops import rearrange
+from torch import nn
 
 
 # 用于获取滤波器张量的函数
 def get_filter_tensors(
-        wavelet,
-        flip: bool,
-        device: Union[torch.device, str] = 'cpu',
-        dtype: torch.dtype = torch.float32,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """将输入的wavelet转换为滤波器张量。
+    wavelet,
+    flip: bool,
+    device: torch.device | str = "cpu",
+    dtype: torch.dtype = torch.float32,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """将输入的wavelet转换为滤波器张量。.
 
     参数：
         wavelet (Wavelet 或 str): 一个pywt wavelet兼容的对象，或者是一个pywt wavelet的名称。
@@ -61,20 +64,20 @@ def _as_wavelet(wavelet):
 # ShuffleBlock模块，用于通道重排
 class ShuffleBlock(nn.Module):
     def __init__(self, groups=2):
-        super(ShuffleBlock, self).__init__()
+        super().__init__()
         self.groups = groups
 
     def forward(self, x):
         # 重排张量的维度
-        x = rearrange(x, 'b (g f) h w -> b g f h w', g=self.groups)
-        x = rearrange(x, 'b g f h w -> b f g h w')
-        x = rearrange(x, 'b f g h w -> b (f g) h w')
+        x = rearrange(x, "b (g f) h w -> b g f h w", g=self.groups)
+        x = rearrange(x, "b g f h w -> b f g h w")
+        x = rearrange(x, "b f g h w -> b (f g) h w")
         return x
 
 
 # 计算外积的辅助函数
 def _outer(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """torch实现的numpy的outer函数，用于计算1D向量的外积。"""
+    """Torch实现的numpy的outer函数，用于计算1D向量的外积。."""
     a_flat = torch.reshape(a, [-1])
     b_flat = torch.reshape(b, [-1])
     a_mul = torch.unsqueeze(a_flat, dim=-1)
@@ -84,7 +87,7 @@ def _outer(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 # 构造二维滤波器的函数
 def construct_2d_filt(lo, hi) -> torch.Tensor:
-    """通过外积构造二维滤波器。
+    """通过外积构造二维滤波器。.
 
     参数：
         lo (torch.Tensor): 低通滤波器。
@@ -102,8 +105,8 @@ def construct_2d_filt(lo, hi) -> torch.Tensor:
 
 
 # 计算填充大小的函数
-def _get_pad(data_len: int, filt_len: int) -> Tuple[int, int]:
-    """计算所需的填充量。
+def _get_pad(data_len: int, filt_len: int) -> tuple[int, int]:
+    """计算所需的填充量。.
 
     参数：
         data_len (int): 输入数据的长度。
@@ -123,10 +126,8 @@ def _get_pad(data_len: int, filt_len: int) -> Tuple[int, int]:
 
 
 # 对数据进行2D FWT填充的函数
-def fwt_pad2(
-        data: torch.Tensor, wavelet, mode: str = "replicate"
-) -> torch.Tensor:
-    """对数据进行2D FWT填充。
+def fwt_pad2(data: torch.Tensor, wavelet, mode: str = "replicate") -> torch.Tensor:
+    """对数据进行2D FWT填充。.
 
     参数：
         data (torch.Tensor): 输入数据（4维）。
@@ -147,9 +148,8 @@ def fwt_pad2(
 
 # DWT（离散小波变换）模块
 class DWT(nn.Module):
-    def __init__(self, dec_lo, dec_hi, wavelet='haar', level=1, mode="replicate"):
-        """
-        初始化DWT类，定义小波滤波器和其他参数。
+    def __init__(self, dec_lo, dec_hi, wavelet="haar", level=1, mode="replicate"):
+        """初始化DWT类，定义小波滤波器和其他参数。.
 
         参数:
         - dec_lo: 低频滤波器
@@ -158,7 +158,7 @@ class DWT(nn.Module):
         - level: 小波分解的层数
         - mode: 填充模式（默认为"replicate"）
         """
-        super(DWT, self).__init__()
+        super().__init__()
         self.wavelet = _as_wavelet(wavelet)  # 将wavelet转换为小波对象
         self.dec_lo = dec_lo  # 低频滤波器
         self.dec_hi = dec_hi  # 高频滤波器
@@ -166,8 +166,7 @@ class DWT(nn.Module):
         self.mode = mode  # 填充模式
 
     def forward(self, x):
-        """
-        执行小波变换。将输入图像进行多层小波分解。
+        """执行小波变换。将输入图像进行多层小波分解。.
 
         参数:
         - x: 输入的图像（形状为 [batch_size, channels, height, width]）
@@ -175,12 +174,12 @@ class DWT(nn.Module):
         返回:
         - wavelet_component: 小波变换后的结果，包含低频和高频分量
         """
-        b, c, h, w = x.shape  # 获取输入图像的尺寸
+        _b, c, h, w = x.shape  # 获取输入图像的尺寸
         if self.level is None:
             self.level = pywt.dwtn_max_level([h, w], self.wavelet)  # 自动计算最大分解层数
 
         # 存储每一层的小波分量
-        wavelet_component: List[Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]] = []
+        wavelet_component: list[torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]] = []
 
         # 初始低频分量为输入图像
         l_component = x
@@ -193,7 +192,7 @@ class DWT(nn.Module):
         for _ in range(self.level):
             l_component = fwt_pad2(l_component, self.wavelet, mode=self.mode)  # 填充并执行前向小波变换
             h_component = F.conv2d(l_component, dwt_kernel, stride=2, groups=c)  # 执行卷积以获取高频分量
-            res = rearrange(h_component, 'b (c f) h w -> b c f h w', f=4)  # 重排列以分离低频和高频分量
+            res = rearrange(h_component, "b (c f) h w -> b c f h w", f=4)  # 重排列以分离低频和高频分量
             l_component, lh_component, hl_component, hh_component = res.split(1, 2)  # 分离低频和三个高频分量
             # 将高频分量存储到列表中
             wavelet_component.append((lh_component.squeeze(2), hl_component.squeeze(2), hh_component.squeeze(2)))
@@ -205,9 +204,8 @@ class DWT(nn.Module):
 
 # IDWT（离散小波逆变换）模块
 class IDWT(nn.Module):
-    def __init__(self, rec_lo, rec_hi, wavelet='haar', level=1, mode="constant"):
-        """
-        初始化IDWT类，定义逆小波滤波器和其他参数。
+    def __init__(self, rec_lo, rec_hi, wavelet="haar", level=1, mode="constant"):
+        """初始化IDWT类，定义逆小波滤波器和其他参数。.
 
         参数:
         - rec_lo: 低频重建滤波器
@@ -216,7 +214,7 @@ class IDWT(nn.Module):
         - level: 小波逆变换的层数
         - mode: 填充模式（默认为"constant"）
         """
-        super(IDWT, self).__init__()
+        super().__init__()
         self.rec_lo = rec_lo  # 低频重建滤波器
         self.rec_hi = rec_hi  # 高频重建滤波器
         self.wavelet = wavelet  # 小波类型
@@ -224,8 +222,7 @@ class IDWT(nn.Module):
         self.mode = mode  # 填充模式
 
     def forward(self, x, weight=None):
-        """
-        执行小波逆变换。根据输入的小波分量重建图像。
+        """执行小波逆变换。根据输入的小波分量重建图像。.
 
         参数:
         - x: 小波分量列表，包括低频和高频分量
@@ -247,9 +244,16 @@ class IDWT(nn.Module):
         self.filt_len = idwt_kernel.shape[-1]  # 获取滤波器长度
         for c_pos, component_lh_hl_hh in enumerate(x[1:]):  # 遍历每一层的小波分量
             # 将低频和高频分量拼接成一个tensor
-            l_component = torch.cat([l_component.unsqueeze(2), component_lh_hl_hh[0].unsqueeze(2),
-                                     component_lh_hl_hh[1].unsqueeze(2), component_lh_hl_hh[2].unsqueeze(2)], 2)
-            l_component = rearrange(l_component, 'b c f h w -> b (c f) h w')  # 重排列
+            l_component = torch.cat(
+                [
+                    l_component.unsqueeze(2),
+                    component_lh_hl_hh[0].unsqueeze(2),
+                    component_lh_hl_hh[1].unsqueeze(2),
+                    component_lh_hl_hh[2].unsqueeze(2),
+                ],
+                2,
+            )
+            l_component = rearrange(l_component, "b c f h w -> b (c f) h w")  # 重排列
 
             # 执行卷积转置以重建图像
             l_component = F.conv_transpose2d(l_component, idwt_kernel, stride=2, groups=c)
@@ -259,8 +263,8 @@ class IDWT(nn.Module):
 
 
 class LWN(nn.Module):
-    def __init__(self, dim, wavelet='haar', initialize=True, head=4, drop_rate=0., use_ca=False, use_sa=False):
-        super(LWN, self).__init__()
+    def __init__(self, dim, wavelet="haar", initialize=True, head=4, drop_rate=0.0, use_ca=False, use_sa=False):
+        super().__init__()
 
         # 初始化参数
         self.dim = dim  # 输入特征的通道数
@@ -300,11 +304,10 @@ class LWN(nn.Module):
             # 如果启用空间注意力，定义水平和垂直方向的空间注意力模块
             self.sa_h = nn.Sequential(
                 nn.PixelShuffle(2),  # 上采样
-                nn.Conv2d(dim // 4, 1, kernel_size=1, padding=0, stride=1, bias=True)  # 输出通道1
+                nn.Conv2d(dim // 4, 1, kernel_size=1, padding=0, stride=1, bias=True),  # 输出通道1
             )
             self.sa_v = nn.Sequential(
-                nn.PixelShuffle(2),
-                nn.Conv2d(dim // 4, 1, kernel_size=1, padding=0, stride=1, bias=True)
+                nn.PixelShuffle(2), nn.Conv2d(dim // 4, 1, kernel_size=1, padding=0, stride=1, bias=True)
             )
 
         if self.use_ca:
@@ -314,8 +317,7 @@ class LWN(nn.Module):
                 nn.Conv2d(dim, dim, 1, padding=0, stride=1, groups=1, bias=True),  # 1x1卷积
             )
             self.ca_v = nn.Sequential(
-                nn.AdaptiveAvgPool2d(1),
-                nn.Conv2d(dim, dim, 1, padding=0, stride=1, groups=1, bias=True)
+                nn.AdaptiveAvgPool2d(1), nn.Conv2d(dim, dim, 1, padding=0, stride=1, groups=1, bias=True)
             )
             self.shuffle = ShuffleBlock(2)  # 用于通道重排的ShuffleBlock
 
@@ -338,10 +340,10 @@ class LWN(nn.Module):
 
         # 执行小波重建
         y = self.waverec([ya, (yh, yv, yd)], None)
-        
+
         if y.shape[-2] != H or y.shape[-1] != W:
-             # Crop 'y' to the exact dimensions of the input (H, W)
-             y = y[..., :H, :W]
+            # Crop 'y' to the exact dimensions of the input (H, W)
+            y = y[..., :H, :W]
 
         # 如果启用空间注意力，进行加权
         if self.use_sa:
@@ -352,8 +354,8 @@ class LWN(nn.Module):
         # 如果启用通道注意力，进行加权
         if self.use_ca:
             # 通过上采样恢复较小的特征图
-            yh = torch.nn.functional.interpolate(yh, scale_factor=2, mode='area')
-            yv = torch.nn.functional.interpolate(yv, scale_factor=2, mode='area')
+            yh = torch.nn.functional.interpolate(yh, scale_factor=2, mode="area")
+            yv = torch.nn.functional.interpolate(yv, scale_factor=2, mode="area")
 
             # 计算通道注意力
             ca_yh = self.ca_h(yh)
@@ -370,55 +372,42 @@ class LWN(nn.Module):
         return self.perfect_reconstruction_loss()[0] + self.alias_cancellation_loss()[0]
 
     def perfect_reconstruction_loss(self):
-        """
-        完美重建损失：确保小波分解和重建过程能够完美重建原始信号。
-        理论上，滤波器应该满足P(z) + P(-z) = 2的条件。这里采用软约束。
+        """完美重建损失：确保小波分解和重建过程能够完美重建原始信号。 理论上，滤波器应该满足P(z) + P(-z) = 2的条件。这里采用软约束。.
         """
         # 计算P(z)的多项式乘积
         pad = self.dec_lo.shape[-1] - 1
-        p_lo = F.conv1d(
-            self.dec_lo.flip(-1).unsqueeze(0),
-            self.rec_lo.flip(-1).unsqueeze(0),
-            padding=pad)
+        p_lo = F.conv1d(self.dec_lo.flip(-1).unsqueeze(0), self.rec_lo.flip(-1).unsqueeze(0), padding=pad)
         pad = self.dec_hi.shape[-1] - 1
-        p_hi = F.conv1d(
-            self.dec_hi.flip(-1).unsqueeze(0),
-            self.rec_hi.flip(-1).unsqueeze(0),
-            padding=pad)
+        p_hi = F.conv1d(self.dec_hi.flip(-1).unsqueeze(0), self.rec_hi.flip(-1).unsqueeze(0), padding=pad)
 
         p_test = p_lo + p_hi
 
-        two_at_power_zero = torch.zeros(p_test.shape, device=p_test.device,
-                                        dtype=p_test.dtype)
+        two_at_power_zero = torch.zeros(p_test.shape, device=p_test.device, dtype=p_test.dtype)
         two_at_power_zero[..., p_test.shape[-1] // 2] = 2
         # 计算误差的平方
         errs = (p_test - two_at_power_zero) * (p_test - two_at_power_zero)
         return torch.sum(errs), p_test, two_at_power_zero
 
     def alias_cancellation_loss(self):
-        """
-        alias cancellation损失：确保小波滤波器满足F0(z)H0(-z) + F1(z)H1(-z) = 0的条件
-        """
+        """Alias cancellation损失：确保小波滤波器满足F0(z)H0(-z) + F1(z)H1(-z) = 0的条件."""
         m1 = torch.tensor([-1], device=self.dec_lo.device, dtype=self.dec_lo.dtype)
         length = self.dec_lo.shape[-1]
-        mask = torch.tensor([torch.pow(m1, n) for n in range(length)][::-1],
-                            device=self.dec_lo.device, dtype=self.dec_lo.dtype)
+        mask = torch.tensor(
+            [torch.pow(m1, n) for n in range(length)][::-1], device=self.dec_lo.device, dtype=self.dec_lo.dtype
+        )
         # 计算多项式乘积
         pad = self.dec_lo.shape[-1] - 1
         p_lo = torch.nn.functional.conv1d(
-            self.dec_lo.flip(-1).unsqueeze(0) * mask,
-            self.rec_lo.flip(-1).unsqueeze(0),
-            padding=pad)
+            self.dec_lo.flip(-1).unsqueeze(0) * mask, self.rec_lo.flip(-1).unsqueeze(0), padding=pad
+        )
 
         pad = self.dec_hi.shape[-1] - 1
         p_hi = torch.nn.functional.conv1d(
-            self.dec_hi.flip(-1).unsqueeze(0) * mask,
-            self.rec_hi.flip(-1).unsqueeze(0),
-            padding=pad)
+            self.dec_hi.flip(-1).unsqueeze(0) * mask, self.rec_hi.flip(-1).unsqueeze(0), padding=pad
+        )
 
         p_test = p_lo + p_hi
-        zeros = torch.zeros(p_test.shape, device=p_test.device,
-                            dtype=p_test.dtype)
+        zeros = torch.zeros(p_test.shape, device=p_test.device, dtype=p_test.dtype)
         errs = (p_test - zeros) * (p_test - zeros)
         return torch.sum(errs), p_test, zeros
 
@@ -430,6 +419,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
+
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
@@ -451,6 +441,7 @@ class Conv(nn.Module):
         """Perform transposed convolution of 2D data."""
         return self.act(self.conv(x))
 
+
 class Bottleneck_LWN(nn.Module):
     """Standard bottleneck."""
 
@@ -463,10 +454,10 @@ class Bottleneck_LWN(nn.Module):
         self.cv3 = LWN(c2)
         self.add = shortcut and c1 == c2
 
-
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv3(self.cv2(self.cv1(x))) if self.add else self.cv3(self.cv2(self.cv1(x)))
+
 
 class C2f_LWN(nn.Module):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
@@ -477,8 +468,7 @@ class C2f_LWN(nn.Module):
         self.c = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
-        self.m = nn.ModuleList(
-            Bottleneck_LWN(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+        self.m = nn.ModuleList(Bottleneck_LWN(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
 
     def forward(self, x):
         """Forward pass through C2f layer."""
@@ -491,8 +481,6 @@ class C2f_LWN(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
-
 
 
 def main():
@@ -521,8 +509,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 # # Ultralytics YOLO 🚀, AGPL-3.0 license

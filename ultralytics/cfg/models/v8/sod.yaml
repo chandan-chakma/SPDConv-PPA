@@ -2,7 +2,7 @@
 # YOLOv8-SOD (Small Object Detection) - Optimized for VisDrone and xView
 
 # Parameters
-nc: 80  # number of classes (will be overridden by dataset)
+nc: 80 # number of classes (will be overridden by dataset)
 scales: # model compound scaling constants
   n: [0.33, 0.25, 1024]
   s: [0.33, 0.50, 1024]
@@ -15,57 +15,57 @@ scales: # model compound scaling constants
 # ========================================
 backbone:
   # Stem
-  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
 
   # Stage 1 - P2/4 (CRITICAL for small objects)
-  - [-1, 1, WaveletDownsample, [128]]  # 1-P2/4 - Preserve high-freq details
-  - [-1, 3, C2f_SOD, [128, True]]      # 2 - Adaptive RF + Context
+  - [-1, 1, WaveletDownsample, [128]] # 1-P2/4 - Preserve high-freq details
+  - [-1, 3, C2f_SOD, [128, True]] # 2 - Adaptive RF + Context
 
   # Stage 2 - P3/8 (Small objects)
-  - [-1, 1, WaveletDownsample, [256]]  # 3-P3/8 - Preserve details
-  - [-1, 6, C2f_SOD, [256, True]]      # 4 - Enhanced processing
-  
+  - [-1, 1, WaveletDownsample, [256]] # 3-P3/8 - Preserve details
+  - [-1, 6, C2f_SOD, [256, True]] # 4 - Enhanced processing
+
   # Stage 3 - P4/16 (Medium objects)
-  - [-1, 1, Conv, [512, 3, 2]]         # 5-P4/16
-  - [-1, 6, C2f, [512, True]]          # 6 - Standard C2f
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
+  - [-1, 6, C2f, [512, True]] # 6 - Standard C2f
 
   # Stage 4 - P5/32 (Large objects)
-  - [-1, 1, Conv, [1024, 3, 2]]        # 7-P5/32
-  - [-1, 3, C2f, [1024, True]]         # 8
-  
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C2f, [1024, True]] # 8
+
   # Context enhancement
-  - [-1, 1, ContextAugmentation, [1024]]  # 9 - Global context
-  - [-1, 1, SPPF, [1024, 5]]              # 10
+  - [-1, 1, ContextAugmentation, [1024]] # 9 - Global context
+  - [-1, 1, SPPF, [1024, 5]] # 10
 
 # ========================================
 # NECK - Super-Resolution + BiFPN
 # ========================================
 head:
   # Top-down pathway with Super-Resolution
-  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 11
-  - [[-1, 6], 1, Concat, [1]]                   # 12 - cat P4
-  - [-1, 3, C2f, [512]]                         # 13
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 11
+  - [[-1, 6], 1, Concat, [1]] # 12 - cat P4
+  - [-1, 3, C2f, [512]] # 13
 
-  - [-1, 1, SuperResolutionUpsample, [256, 2]]  # 14 - SR upsample!
-  - [[-1, 4], 1, Concat, [1]]                   # 15 - cat P3
-  - [-1, 3, C2f, [256]]                         # 16 (P3/8-small)
+  - [-1, 1, SuperResolutionUpsample, [256, 2]] # 14 - SR upsample!
+  - [[-1, 4], 1, Concat, [1]] # 15 - cat P3
+  - [-1, 3, C2f, [256]] # 16 (P3/8-small)
 
-  - [-1, 1, SuperResolutionUpsample, [128, 2]]  # 17 - SR for P2!
-  - [[-1, 2], 1, Concat, [1]]                   # 18 - cat P2
-  - [-1, 3, C2f, [128]]                         # 19 (P2/4-tiny) ← Key for small objects!
+  - [-1, 1, SuperResolutionUpsample, [128, 2]] # 17 - SR for P2!
+  - [[-1, 2], 1, Concat, [1]] # 18 - cat P2
+  - [-1, 3, C2f, [128]] # 19 (P2/4-tiny) ← Key for small objects!
 
   # Bottom-up pathway with enhanced fusion
-  - [-1, 1, Conv, [128, 3, 2]]                  # 20
-  - [[-1, 16], 1, Concat, [1]]                  # 21 - cat P3
-  - [-1, 3, C2f, [256]]                         # 22 (P3/8-small)
+  - [-1, 1, Conv, [128, 3, 2]] # 20
+  - [[-1, 16], 1, Concat, [1]] # 21 - cat P3
+  - [-1, 3, C2f, [256]] # 22 (P3/8-small)
 
-  - [-1, 1, Conv, [256, 3, 2]]                  # 23
-  - [[-1, 13], 1, Concat, [1]]                  # 24 - cat P4
-  - [-1, 3, C2f, [512]]                         # 25 (P4/16-medium)
+  - [-1, 1, Conv, [256, 3, 2]] # 23
+  - [[-1, 13], 1, Concat, [1]] # 24 - cat P4
+  - [-1, 3, C2f, [512]] # 25 (P4/16-medium)
 
-  - [-1, 1, Conv, [512, 3, 2]]                  # 26
-  - [[-1, 10], 1, Concat, [1]]                  # 27 - cat P5
-  - [-1, 3, C2f, [1024]]                        # 28 (P5/32-large)
+  - [-1, 1, Conv, [512, 3, 2]] # 26
+  - [[-1, 10], 1, Concat, [1]] # 27 - cat P5
+  - [-1, 3, C2f, [1024]] # 28 (P5/32-large)
 
   # Detection heads (P2, P3, P4, P5)
-  - [[19, 22, 25, 28], 1, Detect, [nc]]  # Detect(P2, P3, P4, P5)
+  - [[19, 22, 25, 28], 1, Detect, [nc]] # Detect(P2, P3, P4, P5)
