@@ -10,62 +10,62 @@
 # Expected: +12-15% mAP improvement on VisDrone/xView
 
 # Parameters
-nc: 10  # number of classes (VisDrone has 10 classes)
+nc: 10 # number of classes (VisDrone has 10 classes)
 scales:
-  n: [0.33, 0.25, 1024]  # YOLOv8n-RSP
+  n: [0.33, 0.25, 1024] # YOLOv8n-RSP
 
 # Backbone (modified to preserve P2 features)
 backbone:
   # [from, repeats, module, args]
-  
+
   # Stem - minimal downsampling to preserve resolution
-  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2 (320×320)
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2 (320×320)
   - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4 (160×160) ← CRITICAL: Save this!
-  
+
   # Stage 1 - P2 level (stride 4) - PRESERVE these features!
-  - [-1, 3, C2f_RSP, [128]]    # 2 - Use RSP module
-  
+  - [-1, 3, C2f_RSP, [128]] # 2 - Use RSP module
+
   # Stage 2 - P3 level (stride 8)
   - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8 (80×80)
-  - [-1, 6, C2f_RSP, [256]]    # 4 - Use RSP module
-  
+  - [-1, 6, C2f_RSP, [256]] # 4 - Use RSP module
+
   # Stage 3 - P4 level (stride 16)
   - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16 (40×40)
-  - [-1, 6, C2f_RSP, [512]]    # 6 - Use RSP module
-  
+  - [-1, 6, C2f_RSP, [512]] # 6 - Use RSP module
+
   # Stage 4 - P5 level (stride 32) - SHALLOW, no deep processing
   - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32 (20×20)
-  - [-1, 3, C2f_RSP, [1024]]    # 8 - Keep shallow!
-  
-  - [-1, 1, SPPF, [1024, 5]]    # 9 - Spatial Pyramid Pooling
+  - [-1, 3, C2f_RSP, [1024]] # 8 - Keep shallow!
+
+  - [-1, 1, SPPF, [1024, 5]] # 9 - Spatial Pyramid Pooling
 
 # Head (P2-P3-P4 detection, NO P5!)
 head:
   # Upsample path (build P2, P3, P4 features)
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 10 - Upsample from P5
-  - [[-1, 6], 1, Concat, [1]]                  # 11 - Concat with P4 (layer 6)
-  - [-1, 3, C2f_RSP, [512]]                    # 12 - Fuse P5+P4
-  
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 13 - Upsample
-  - [[-1, 4], 1, Concat, [1]]                  # 14 - Concat with P3 (layer 4)
-  - [-1, 3, C2f_RSP, [256]]                    # 15 - Fuse P4+P3
-  
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']] # 16 - Upsample to P2!
-  - [[-1, 2], 1, Concat, [1]]                  # 17 - Concat with P2 (layer 2) ← KEY!
-  - [-1, 3, C2f_RSP, [128]]                    # 18 - P2 features (stride 4)
-  
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 10 - Upsample from P5
+  - [[-1, 6], 1, Concat, [1]] # 11 - Concat with P4 (layer 6)
+  - [-1, 3, C2f_RSP, [512]] # 12 - Fuse P5+P4
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 13 - Upsample
+  - [[-1, 4], 1, Concat, [1]] # 14 - Concat with P3 (layer 4)
+  - [-1, 3, C2f_RSP, [256]] # 15 - Fuse P4+P3
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 16 - Upsample to P2!
+  - [[-1, 2], 1, Concat, [1]] # 17 - Concat with P2 (layer 2) ← KEY!
+  - [-1, 3, C2f_RSP, [128]] # 18 - P2 features (stride 4)
+
   # Downsample path (build detection scales)
-  - [-1, 1, Conv, [256, 3, 2]]                 # 19 - Downsample P2->P3
-  - [[-1, 15], 1, Concat, [1]]                 # 20 - Concat with P3
-  - [-1, 3, C2f_RSP, [256]]                    # 21 - P3 features (stride 8)
-  
-  - [-1, 1, Conv, [512, 3, 2]]                 # 22 - Downsample P3->P4
-  - [[-1, 12], 1, Concat, [1]]                 # 23 - Concat with P4
-  - [-1, 3, C2f_RSP, [512]]                    # 24 - P4 features (stride 16)
-  
+  - [-1, 1, Conv, [256, 3, 2]] # 19 - Downsample P2->P3
+  - [[-1, 15], 1, Concat, [1]] # 20 - Concat with P3
+  - [-1, 3, C2f_RSP, [256]] # 21 - P3 features (stride 8)
+
+  - [-1, 1, Conv, [512, 3, 2]] # 22 - Downsample P3->P4
+  - [[-1, 12], 1, Concat, [1]] # 23 - Concat with P4
+  - [-1, 3, C2f_RSP, [512]] # 24 - P4 features (stride 16)
+
   # Detection heads at P2, P3, P4 (strides 4, 8, 16) - NO P5!
-  - [[18, 21, 24], 1, Detect, [nc]]            # 25 - Detect(P2, P3, P4)
-  
+  - [[18, 21, 24], 1, Detect, [nc]] # 25 - Detect(P2, P3, P4)
+
 # Summary:
 # - 3 detection heads: P2 (stride 4), P3 (stride 8), P4 (stride 16)
 # - P2 head is NEW: keeps 8-pixel objects at 2 pixels (detectable!)

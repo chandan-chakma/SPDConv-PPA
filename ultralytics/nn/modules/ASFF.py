@@ -1,10 +1,13 @@
+import math
+
 import torch
 import torch.nn as nn
-from ultralytics.utils.tal import dist2bbox, make_anchors
-import math
 import torch.nn.functional as F
 
-__all__ = ['Detect_ASFF']
+from ultralytics.utils.tal import dist2bbox, make_anchors
+
+__all__ = ["Detect_ASFF"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -17,6 +20,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -36,9 +40,8 @@ class Conv(nn.Module):
 
 
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
-    Proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
+    """Integral module of Distribution Focal Loss (DFL). Proposed in Generalized Focal Loss
+    https://ieeexplore.ieee.org/document/9792391.
     """
 
     def __init__(self, c1=16):
@@ -51,25 +54,20 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
 
 class ASFFV5(nn.Module):
     def __init__(self, level, ch, multiplier=1, rfb=False, vis=False, act_cfg=True):
+        """ASFF version for YoloV5 . different than YoloV3 multiplier should be 1, 0.5 which means, the channel of ASFF
+        can be 512, 256, 128 -> multiplier=1 256, 128, 64 -> multiplier=0.5 For even smaller, you need change
+        code manually.
         """
-        ASFF version for YoloV5 .
-        different than YoloV3
-        multiplier should be 1, 0.5 which means, the channel of ASFF can be
-        512, 256, 128 -> multiplier=1
-        256, 128, 64 -> multiplier=0.5
-        For even smaller, you need change code manually.
-        """
-        super(ASFFV5, self).__init__()
+        super().__init__()
         self.level = level
-        self.dim = [int(ch[2] * multiplier), int(ch[1] * multiplier),
-                    int(ch[0] * multiplier)]
+        self.dim = [int(ch[2] * multiplier), int(ch[1] * multiplier), int(ch[0] * multiplier)]
         # print(self.dim)
 
         self.inter_dim = self.dim[self.level]
@@ -78,40 +76,27 @@ class ASFFV5(nn.Module):
 
             self.stride_level_2 = Conv(int(ch[0] * multiplier), self.inter_dim, 3, 2)
 
-            self.expand = Conv(self.inter_dim, int(
-                ch[2] * multiplier), 3, 1)
+            self.expand = Conv(self.inter_dim, int(ch[2] * multiplier), 3, 1)
         elif level == 1:
-            self.compress_level_0 = Conv(
-                int(ch[2] * multiplier), self.inter_dim, 1, 1)
-            self.stride_level_2 = Conv(
-                int(ch[0] * multiplier), self.inter_dim, 3, 2)
+            self.compress_level_0 = Conv(int(ch[2] * multiplier), self.inter_dim, 1, 1)
+            self.stride_level_2 = Conv(int(ch[0] * multiplier), self.inter_dim, 3, 2)
             self.expand = Conv(self.inter_dim, int(ch[1] * multiplier), 3, 1)
         elif level == 2:
-            self.compress_level_0 = Conv(
-                int(ch[2] * multiplier), self.inter_dim, 1, 1)
-            self.compress_level_1 = Conv(
-                int(ch[1] * multiplier), self.inter_dim, 1, 1)
-            self.expand = Conv(self.inter_dim, int(
-                ch[0] * multiplier), 3, 1)
+            self.compress_level_0 = Conv(int(ch[2] * multiplier), self.inter_dim, 1, 1)
+            self.compress_level_1 = Conv(int(ch[1] * multiplier), self.inter_dim, 1, 1)
+            self.expand = Conv(self.inter_dim, int(ch[0] * multiplier), 3, 1)
 
         # when adding rfb, we use half number of channels to save memory
         compress_c = 8 if rfb else 16
-        self.weight_level_0 = Conv(
-            self.inter_dim, compress_c, 1, 1)
-        self.weight_level_1 = Conv(
-            self.inter_dim, compress_c, 1, 1)
-        self.weight_level_2 = Conv(
-            self.inter_dim, compress_c, 1, 1)
+        self.weight_level_0 = Conv(self.inter_dim, compress_c, 1, 1)
+        self.weight_level_1 = Conv(self.inter_dim, compress_c, 1, 1)
+        self.weight_level_2 = Conv(self.inter_dim, compress_c, 1, 1)
 
-        self.weight_levels = Conv(
-            compress_c * 3, 3, 1, 1)
+        self.weight_levels = Conv(compress_c * 3, 3, 1, 1)
         self.vis = vis
 
     def forward(self, x):  # l,m,s
-        """
-        # 128, 256, 512
-        512, 256, 128
-        from small -> large
+        """# 128, 256, 512 512, 256, 128 from small -> large.
         """
         x_level_0 = x[2]  # l
         x_level_1 = x[1]  # m
@@ -122,22 +107,18 @@ class ASFFV5(nn.Module):
         if self.level == 0:
             level_0_resized = x_level_0
             level_1_resized = self.stride_level_1(x_level_1)
-            level_2_downsampled_inter = F.max_pool2d(
-                x_level_2, 3, stride=2, padding=1)
+            level_2_downsampled_inter = F.max_pool2d(x_level_2, 3, stride=2, padding=1)
             level_2_resized = self.stride_level_2(level_2_downsampled_inter)
         elif self.level == 1:
             level_0_compressed = self.compress_level_0(x_level_0)
-            level_0_resized = F.interpolate(
-                level_0_compressed, scale_factor=2, mode='nearest')
+            level_0_resized = F.interpolate(level_0_compressed, scale_factor=2, mode="nearest")
             level_1_resized = x_level_1
             level_2_resized = self.stride_level_2(x_level_2)
         elif self.level == 2:
             level_0_compressed = self.compress_level_0(x_level_0)
-            level_0_resized = F.interpolate(
-                level_0_compressed, scale_factor=4, mode='nearest')
+            level_0_resized = F.interpolate(level_0_compressed, scale_factor=4, mode="nearest")
             x_level_1_compressed = self.compress_level_1(x_level_1)
-            level_1_resized = F.interpolate(
-                x_level_1_compressed, scale_factor=2, mode='nearest')
+            level_1_resized = F.interpolate(x_level_1_compressed, scale_factor=2, mode="nearest")
             level_2_resized = x_level_2
 
         # print('level: {}, l1_resized: {}, l2_resized: {}'.format(self.level,
@@ -149,14 +130,15 @@ class ASFFV5(nn.Module):
         # print('level_1_weight_v: ', level_1_weight_v.shape)
         # print('level_2_weight_v: ', level_2_weight_v.shape)
 
-        levels_weight_v = torch.cat(
-            (level_0_weight_v, level_1_weight_v, level_2_weight_v), 1)
+        levels_weight_v = torch.cat((level_0_weight_v, level_1_weight_v, level_2_weight_v), 1)
         levels_weight = self.weight_levels(levels_weight_v)
         levels_weight = F.softmax(levels_weight, dim=1)
 
-        fused_out_reduced = level_0_resized * levels_weight[:, 0:1, :, :] + \
-                            level_1_resized * levels_weight[:, 1:2, :, :] + \
-                            level_2_resized * levels_weight[:, 2:, :, :]
+        fused_out_reduced = (
+            level_0_resized * levels_weight[:, 0:1, :, :]
+            + level_1_resized * levels_weight[:, 1:2, :, :]
+            + level_2_resized * levels_weight[:, 2:, :, :]
+        )
 
         out = self.expand(fused_out_reduced)
 
@@ -168,6 +150,7 @@ class ASFFV5(nn.Module):
 
 class Detect_ASFF(nn.Module):
     """YOLOv8 Detect head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -184,7 +167,8 @@ class Detect_ASFF(nn.Module):
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
+        )
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
         self.l0_fusion = ASFFV5(level=0, ch=ch, multiplier=multiplier, rfb=rfb)
@@ -207,14 +191,14 @@ class Detect_ASFF(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
 
-        if self.export and self.format in ('tflite', 'edgetpu'):
+        if self.export and self.format in ("tflite", "edgetpu"):
             # Normalize xywh with image size to mitigate quantization error of TFLite integer models as done in YOLOv5:
             # https://github.com/ultralytics/yolov5/blob/0c8de3fca4a702f8ff5c435e67f378d1fce70243/models/tf.py#L307-L309
             # See this PR for details: https://github.com/ultralytics/ultralytics/pull/1695
@@ -233,7 +217,7 @@ class Detect_ASFF(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a[-1].bias.data[:] = 1.0  # box
-            b[-1].bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
 if __name__ == "__main__":
