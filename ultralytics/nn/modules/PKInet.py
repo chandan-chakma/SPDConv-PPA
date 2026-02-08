@@ -1,17 +1,18 @@
-import math
-from typing import Optional, Union, Sequence
+from __future__ import annotations
+
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule, build_norm_layer
 from mmcv.cnn.bricks import DropPath
 from mmengine.model import BaseModule
+
 from .conv import Conv
 
 
-
-def autopad(kernel_size: int, padding: int = None, dilation: int = 1):
-    assert kernel_size % 2 == 1, 'if use autopad, kernel size must be odd'
+def autopad(kernel_size: int, padding: int | None = None, dilation: int = 1):
+    assert kernel_size % 2 == 1, "if use autopad, kernel size must be odd"
     if dilation > 1:
         kernel_size = dilation * (kernel_size - 1) + 1
     if padding is None:
@@ -22,23 +23,21 @@ def autopad(kernel_size: int, padding: int = None, dilation: int = 1):
 def make_divisible(value, divisor, min_value=None, min_ratio=0.9):
     """Make divisible function.
 
-    This function rounds the channel number to the nearest value that can be
-    divisible by the divisor. It is taken from the original tf repo. It ensures
-    that all layers have a channel number that is divisible by divisor. It can
-    be seen here: https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py  # noqa
+    This function rounds the channel number to the nearest value that can be divisible by the divisor. It is taken from
+    the original tf repo. It ensures that all layers have a channel number that is divisible by divisor. It can be seen
+    here: https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py # noqa
 
     Args:
         value (int, float): The original channel number.
         divisor (int): The divisor to fully divide the channel number.
         min_value (int): The minimum value of the output channel.
-            Default: None, means that the minimum value equal to the divisor.
+        Default: None, means that the minimum value equal to the divisor.
         min_ratio (float): The minimum ratio of the rounded channel number to
             the original channel number. Default: 0.9.
 
     Returns:
         int: The modified output channel number.
     """
-
     if min_value is None:
         min_value = divisor
     new_value = max(min_value, int(value + divisor / 2) // divisor * divisor)
@@ -67,7 +66,8 @@ class BHWC2BCHW(nn.Module):
 
 
 class GSiLU(BaseModule):
-    """Global Sigmoid-Gated Linear Unit, reproduced from paper <SIMPLE CNN FOR VISION>"""
+    """Global Sigmoid-Gated Linear Unit, reproduced from paper <SIMPLE CNN FOR VISION>."""
+
     def __init__(self):
         super().__init__()
         self.adpool = nn.AdaptiveAvgPool2d(1)
@@ -77,28 +77,41 @@ class GSiLU(BaseModule):
 
 
 class CAA(BaseModule):
-    """Context Anchor Attention"""
+    """Context Anchor Attention."""
+
     def __init__(
-            self,
-            channels: int,
-            h_kernel_size: int = 11,
-            v_kernel_size: int = 11,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        channels: int,
+        h_kernel_size: int = 11,
+        v_kernel_size: int = 11,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         self.avg_pool = nn.AvgPool2d(7, 1, 3)
-        self.conv1 = ConvModule(channels, channels, 1, 1, 0,
-                                norm_cfg=norm_cfg, act_cfg=act_cfg)
-        self.h_conv = ConvModule(channels, channels, (1, h_kernel_size), 1,
-                                 (0, h_kernel_size // 2), groups=channels,
-                                 norm_cfg=None, act_cfg=None)
-        self.v_conv = ConvModule(channels, channels, (v_kernel_size, 1), 1,
-                                 (v_kernel_size // 2, 0), groups=channels,
-                                 norm_cfg=None, act_cfg=None)
-        self.conv2 = ConvModule(channels, channels, 1, 1, 0,
-                                norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.conv1 = ConvModule(channels, channels, 1, 1, 0, norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.h_conv = ConvModule(
+            channels,
+            channels,
+            (1, h_kernel_size),
+            1,
+            (0, h_kernel_size // 2),
+            groups=channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.v_conv = ConvModule(
+            channels,
+            channels,
+            (v_kernel_size, 1),
+            1,
+            (v_kernel_size // 2, 0),
+            groups=channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.conv2 = ConvModule(channels, channels, 1, 1, 0, norm_cfg=norm_cfg, act_cfg=act_cfg)
         self.act = nn.Sigmoid()
 
     def forward(self, x):
@@ -107,18 +120,19 @@ class CAA(BaseModule):
 
 
 class ConvFFN(BaseModule):
-    """Multi-layer perceptron implemented with ConvModule"""
+    """Multi-layer perceptron implemented with ConvModule."""
+
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: Optional[int] = None,
-            hidden_channels_scale: float = 4.0,
-            hidden_kernel_size: int = 3,
-            dropout_rate: float = 0.,
-            add_identity: bool = True,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        in_channels: int,
+        out_channels: int | None = None,
+        hidden_channels_scale: float = 4.0,
+        hidden_kernel_size: int = 3,
+        dropout_rate: float = 0.0,
+        add_identity: bool = True,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         out_channels = out_channels or in_channels
@@ -128,15 +142,24 @@ class ConvFFN(BaseModule):
             BCHW2BHWC(),
             nn.LayerNorm(in_channels),
             BHWC2BCHW(),
-            ConvModule(in_channels, hidden_channels, kernel_size=1, stride=1, padding=0,
-                       norm_cfg=norm_cfg, act_cfg=act_cfg),
-            ConvModule(hidden_channels, hidden_channels, kernel_size=hidden_kernel_size, stride=1,
-                       padding=hidden_kernel_size // 2, groups=hidden_channels,
-                       norm_cfg=norm_cfg, act_cfg=None),
+            ConvModule(
+                in_channels, hidden_channels, kernel_size=1, stride=1, padding=0, norm_cfg=norm_cfg, act_cfg=act_cfg
+            ),
+            ConvModule(
+                hidden_channels,
+                hidden_channels,
+                kernel_size=hidden_kernel_size,
+                stride=1,
+                padding=hidden_kernel_size // 2,
+                groups=hidden_channels,
+                norm_cfg=norm_cfg,
+                act_cfg=None,
+            ),
             GSiLU(),
             nn.Dropout(dropout_rate),
-            ConvModule(hidden_channels, out_channels, kernel_size=1, stride=1, padding=0,
-                       norm_cfg=norm_cfg, act_cfg=act_cfg),
+            ConvModule(
+                hidden_channels, out_channels, kernel_size=1, stride=1, padding=0, norm_cfg=norm_cfg, act_cfg=act_cfg
+            ),
             nn.Dropout(dropout_rate),
         )
         self.add_identity = add_identity
@@ -147,65 +170,106 @@ class ConvFFN(BaseModule):
 
 
 class DownSamplingLayer(BaseModule):
-    """Down sampling layer"""
+    """Down sampling layer."""
+
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: Optional[int] = None,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        in_channels: int,
+        out_channels: int | None = None,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         out_channels = out_channels or (in_channels * 2)
 
-        self.down_conv = ConvModule(in_channels, out_channels, kernel_size=3, stride=2, padding=1,
-                                    norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.down_conv = ConvModule(
+            in_channels, out_channels, kernel_size=3, stride=2, padding=1, norm_cfg=norm_cfg, act_cfg=act_cfg
+        )
 
     def forward(self, x):
         return self.down_conv(x)
 
 
-class InceptionBottleneck(BaseModule):   # KP Imodel
-    """Bottleneck with Inception module"""
+class InceptionBottleneck(BaseModule):  # KP Imodel
+    """Bottleneck with Inception module."""
+
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: Optional[int] = None,
-            kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
-            dilations: Sequence[int] = (1, 1, 1, 1, 1),
-            expansion: float = 1.0,
-            add_identity: bool = True,
-            with_caa: bool = True,
-            caa_kernel_size: int = 11,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        in_channels: int,
+        out_channels: int | None = None,
+        kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
+        dilations: Sequence[int] = (1, 1, 1, 1, 1),
+        expansion: float = 1.0,
+        add_identity: bool = True,
+        with_caa: bool = True,
+        caa_kernel_size: int = 11,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         out_channels = out_channels or in_channels
         hidden_channels = make_divisible(int(out_channels * expansion), 8)
 
-        self.pre_conv = ConvModule(in_channels, hidden_channels, 1, 1, 0, 1,
-                                   norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.pre_conv = ConvModule(in_channels, hidden_channels, 1, 1, 0, 1, norm_cfg=norm_cfg, act_cfg=act_cfg)
 
-        self.dw_conv = ConvModule(hidden_channels, hidden_channels, kernel_sizes[0], 1,
-                                  autopad(kernel_sizes[0], None, dilations[0]), dilations[0],
-                                  groups=hidden_channels, norm_cfg=None, act_cfg=None)
-        self.dw_conv1 = ConvModule(hidden_channels, hidden_channels, kernel_sizes[1], 1,
-                                   autopad(kernel_sizes[1], None, dilations[1]), dilations[1],
-                                   groups=hidden_channels, norm_cfg=None, act_cfg=None)
-        self.dw_conv2 = ConvModule(hidden_channels, hidden_channels, kernel_sizes[2], 1,
-                                   autopad(kernel_sizes[2], None, dilations[2]), dilations[2],
-                                   groups=hidden_channels, norm_cfg=None, act_cfg=None)
-        self.dw_conv3 = ConvModule(hidden_channels, hidden_channels, kernel_sizes[3], 1,
-                                   autopad(kernel_sizes[3], None, dilations[3]), dilations[3],
-                                   groups=hidden_channels, norm_cfg=None, act_cfg=None)
-        self.dw_conv4 = ConvModule(hidden_channels, hidden_channels, kernel_sizes[4], 1,
-                                   autopad(kernel_sizes[4], None, dilations[4]), dilations[4],
-                                   groups=hidden_channels, norm_cfg=None, act_cfg=None)
-        self.pw_conv = ConvModule(hidden_channels, hidden_channels, 1, 1, 0, 1,
-                                  norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.dw_conv = ConvModule(
+            hidden_channels,
+            hidden_channels,
+            kernel_sizes[0],
+            1,
+            autopad(kernel_sizes[0], None, dilations[0]),
+            dilations[0],
+            groups=hidden_channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.dw_conv1 = ConvModule(
+            hidden_channels,
+            hidden_channels,
+            kernel_sizes[1],
+            1,
+            autopad(kernel_sizes[1], None, dilations[1]),
+            dilations[1],
+            groups=hidden_channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.dw_conv2 = ConvModule(
+            hidden_channels,
+            hidden_channels,
+            kernel_sizes[2],
+            1,
+            autopad(kernel_sizes[2], None, dilations[2]),
+            dilations[2],
+            groups=hidden_channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.dw_conv3 = ConvModule(
+            hidden_channels,
+            hidden_channels,
+            kernel_sizes[3],
+            1,
+            autopad(kernel_sizes[3], None, dilations[3]),
+            dilations[3],
+            groups=hidden_channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.dw_conv4 = ConvModule(
+            hidden_channels,
+            hidden_channels,
+            kernel_sizes[4],
+            1,
+            autopad(kernel_sizes[4], None, dilations[4]),
+            dilations[4],
+            groups=hidden_channels,
+            norm_cfg=None,
+            act_cfg=None,
+        )
+        self.pw_conv = ConvModule(hidden_channels, hidden_channels, 1, 1, 0, 1, norm_cfg=norm_cfg, act_cfg=act_cfg)
 
         if with_caa:
             self.caa_factor = CAA(hidden_channels, caa_kernel_size, caa_kernel_size, None, None)
@@ -214,8 +278,7 @@ class InceptionBottleneck(BaseModule):   # KP Imodel
 
         self.add_identity = add_identity and in_channels == out_channels
 
-        self.post_conv = ConvModule(hidden_channels, out_channels, 1, 1, 0, 1,
-                                    norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.post_conv = ConvModule(hidden_channels, out_channels, 1, 1, 0, 1, norm_cfg=norm_cfg, act_cfg=act_cfg)
 
     def forward(self, x):
         x = self.pre_conv(x)
@@ -237,25 +300,26 @@ class InceptionBottleneck(BaseModule):   # KP Imodel
 
 
 class PKIBlock(BaseModule):
-    """Poly Kernel Inception Block"""
+    """Poly Kernel Inception Block."""
+
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: Optional[int] = None,
-            kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
-            dilations: Sequence[int] = (1, 1, 1, 1, 1),
-            with_caa: bool = True,
-            caa_kernel_size: int = 11,
-            expansion: float = 1.0,
-            ffn_scale: float = 4.0,
-            ffn_kernel_size: int = 3,
-            dropout_rate: float = 0.,
-            drop_path_rate: float = 0.,
-            layer_scale: Optional[float] = 1.0,
-            add_identity: bool = True,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        in_channels: int,
+        out_channels: int | None = None,
+        kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
+        dilations: Sequence[int] = (1, 1, 1, 1, 1),
+        with_caa: bool = True,
+        caa_kernel_size: int = 11,
+        expansion: float = 1.0,
+        ffn_scale: float = 4.0,
+        ffn_kernel_size: int = 3,
+        dropout_rate: float = 0.0,
+        drop_path_rate: float = 0.0,
+        layer_scale: float | None = 1.0,
+        add_identity: bool = True,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         out_channels = out_channels or in_channels
@@ -268,12 +332,28 @@ class PKIBlock(BaseModule):
             self.norm1 = nn.BatchNorm2d(in_channels)
             self.norm2 = nn.BatchNorm2d(hidden_channels)
 
-        self.block = InceptionBottleneck(in_channels, hidden_channels, kernel_sizes, dilations,
-                                         expansion=1.0, add_identity=True,
-                                         with_caa=with_caa, caa_kernel_size=caa_kernel_size,
-                                         norm_cfg=norm_cfg, act_cfg=act_cfg)
-        self.ffn = ConvFFN(hidden_channels, out_channels, ffn_scale, ffn_kernel_size, dropout_rate, add_identity=False,
-                           norm_cfg=None, act_cfg=None)
+        self.block = InceptionBottleneck(
+            in_channels,
+            hidden_channels,
+            kernel_sizes,
+            dilations,
+            expansion=1.0,
+            add_identity=True,
+            with_caa=with_caa,
+            caa_kernel_size=caa_kernel_size,
+            norm_cfg=norm_cfg,
+            act_cfg=act_cfg,
+        )
+        self.ffn = ConvFFN(
+            hidden_channels,
+            out_channels,
+            ffn_scale,
+            ffn_kernel_size,
+            dropout_rate,
+            add_identity=False,
+            norm_cfg=None,
+            act_cfg=None,
+        )
         self.drop_path = DropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
 
         self.layer_scale = layer_scale
@@ -301,51 +381,104 @@ class PKIBlock(BaseModule):
 
 
 class PKIStage(BaseModule):
-    """Poly Kernel Inception Stage"""
+    """Poly Kernel Inception Stage."""
+
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            num_blocks: int,
-            kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
-            dilations: Sequence[int] = (1, 1, 1, 1, 1),
-            expansion: float = 0.5,
-            ffn_scale: float = 4.0,
-            ffn_kernel_size: int = 3,
-            dropout_rate: float = 0.,
-            drop_path_rate: Union[float, list] = 0.,
-            layer_scale: Optional[float] = 1.0,
-            shortcut_with_ffn: bool = True,
-            shortcut_ffn_scale: float = 4.0,
-            shortcut_ffn_kernel_size: int = 5,
-            add_identity: bool = True,
-            with_caa: bool = True,
-            caa_kernel_size: int = 11,
-            norm_cfg: Optional[dict] = dict(type='BN', momentum=0.03, eps=0.001),
-            act_cfg: Optional[dict] = dict(type='SiLU'),
-            init_cfg: Optional[dict] = None,
+        self,
+        in_channels: int,
+        out_channels: int,
+        num_blocks: int,
+        kernel_sizes: Sequence[int] = (3, 5, 7, 9, 11),
+        dilations: Sequence[int] = (1, 1, 1, 1, 1),
+        expansion: float = 0.5,
+        ffn_scale: float = 4.0,
+        ffn_kernel_size: int = 3,
+        dropout_rate: float = 0.0,
+        drop_path_rate: float | list = 0.0,
+        layer_scale: float | None = 1.0,
+        shortcut_with_ffn: bool = True,
+        shortcut_ffn_scale: float = 4.0,
+        shortcut_ffn_kernel_size: int = 5,
+        add_identity: bool = True,
+        with_caa: bool = True,
+        caa_kernel_size: int = 11,
+        norm_cfg: dict | None = dict(type="BN", momentum=0.03, eps=0.001),
+        act_cfg: dict | None = dict(type="SiLU"),
+        init_cfg: dict | None = None,
     ):
         super().__init__(init_cfg)
         hidden_channels = make_divisible(int(out_channels * expansion), 8)
 
         self.downsample = DownSamplingLayer(in_channels, out_channels, norm_cfg, act_cfg)
 
-        self.conv1 = ConvModule(out_channels, 2 * hidden_channels, kernel_size=1, stride=1, padding=0, dilation=1,
-                                norm_cfg=norm_cfg, act_cfg=act_cfg)
-        self.conv2 = ConvModule(2 * hidden_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1,
-                                norm_cfg=norm_cfg, act_cfg=act_cfg)
-        self.conv3 = ConvModule(out_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1,
-                                norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.conv1 = ConvModule(
+            out_channels,
+            2 * hidden_channels,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1,
+            norm_cfg=norm_cfg,
+            act_cfg=act_cfg,
+        )
+        self.conv2 = ConvModule(
+            2 * hidden_channels,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1,
+            norm_cfg=norm_cfg,
+            act_cfg=act_cfg,
+        )
+        self.conv3 = ConvModule(
+            out_channels,
+            out_channels,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            dilation=1,
+            norm_cfg=norm_cfg,
+            act_cfg=act_cfg,
+        )
 
-        self.ffn = ConvFFN(hidden_channels, hidden_channels, shortcut_ffn_scale, shortcut_ffn_kernel_size, 0.,
-                           add_identity=True, norm_cfg=None, act_cfg=None) if shortcut_with_ffn else None
+        self.ffn = (
+            ConvFFN(
+                hidden_channels,
+                hidden_channels,
+                shortcut_ffn_scale,
+                shortcut_ffn_kernel_size,
+                0.0,
+                add_identity=True,
+                norm_cfg=None,
+                act_cfg=None,
+            )
+            if shortcut_with_ffn
+            else None
+        )
 
-        self.blocks = nn.ModuleList([
-            PKIBlock(hidden_channels, hidden_channels, kernel_sizes, dilations, with_caa,
-                     caa_kernel_size+2*i, 1.0, ffn_scale, ffn_kernel_size, dropout_rate,
-                     drop_path_rate[i] if isinstance(drop_path_rate, list) else drop_path_rate,
-                     layer_scale, add_identity, norm_cfg, act_cfg) for i in range(num_blocks)
-        ])
+        self.blocks = nn.ModuleList(
+            [
+                PKIBlock(
+                    hidden_channels,
+                    hidden_channels,
+                    kernel_sizes,
+                    dilations,
+                    with_caa,
+                    caa_kernel_size + 2 * i,
+                    1.0,
+                    ffn_scale,
+                    ffn_kernel_size,
+                    dropout_rate,
+                    drop_path_rate[i] if isinstance(drop_path_rate, list) else drop_path_rate,
+                    layer_scale,
+                    add_identity,
+                    norm_cfg,
+                    act_cfg,
+                )
+                for i in range(num_blocks)
+            ]
+        )
 
     def forward(self, x):
         x = self.downsample(x)
@@ -389,7 +522,6 @@ class C2f_PKIBlock(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
 
 
 # # Ultralytics YOLO 🚀, AGPL-3.0 license
@@ -438,4 +570,3 @@ class C2f_PKIBlock(nn.Module):
 #   - [-1, 3, C2f, [1024]] # 21 (P5/32-large)       #1x256x20x20
 
 #   - [[15, 18, 21], 1, Detect, [nc]] # Detect(P3, P4, P5)
-
