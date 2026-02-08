@@ -1,27 +1,26 @@
-from ultralytics.models import NAS, RTDETR, SAM, YOLO, FastSAM, YOLOWorld
+from ultralytics.models import YOLO
 
-if __name__=="__main__":
-
-
+if __name__ == "__main__":
     # 使用YOLOv8.yamy文件搭建的模型训练
     # model = YOLO(r"D:\bilibili\model\ultralytics-main\ultralytics\cfg\models\v8\yolov8_my.yaml")  # build a new model from YAML
     # results = model.train(data=r'D:\bilibili\model\ultralytics-main\ultralytics\cfg\datasets\VOC_my.yaml',
     #                       epochs=100, imgsz=640, batch=4)
     #
-    # # 加载已训练好的模型权重搭建模型训练 
+    # # 加载已训练好的模型权重搭建模型训练
     # model = YOLO(r'D:\bilibili\model\ultralytics-main\tests\yolov8n.pt')  # load a pretrained model (recommended for training)
     # results = model.train(data=r'D:\bilibili\model\ultralytics-main\ultralytics\cfg\datasets\VOC_my.yaml',
     #                       epochs=100, imgsz=640, batch=4)
 
     # 使用自己的YOLOv8.yamy文件搭建模型并加载预训练权重训练模型
-    model = YOLO(r"ultralytics\cfg\models\v8\RIM.yaml")\
-        .load('yolov8n.pt')  # build from YAML and transfer weights
+    model = YOLO(r"ultralytics\cfg\models\v8\RIM.yaml").load("yolov8n.pt")  # build from YAML and transfer weights
 
     results = model.train(
-        data=r'ultralytics\cfg\datasets\VisDrone.yaml',
-        epochs=100, imgsz=640, batch=8, 
-        #Optimizer settings
-        optimizer='AdamW',
+        data=r"ultralytics\cfg\datasets\VisDrone.yaml",
+        epochs=100,
+        imgsz=640,
+        batch=8,
+        # Optimizer settings
+        optimizer="AdamW",
         lr0=0.01,
         lrf=0.01,
         momentum=0.937,
@@ -29,7 +28,6 @@ if __name__=="__main__":
         warmup_epochs=3.0,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
-        
         # Augmentation settings
         hsv_h=0.015,
         hsv_s=0.7,
@@ -45,12 +43,10 @@ if __name__=="__main__":
         mosaic=1.0,
         mixup=0.1,
         copy_paste=0.1,
-        
         # Loss settings
         box=7.5,
         cls=0.5,
         dfl=1.5,
-        
         # Other settings
         close_mosaic=20,
         amp=True,
@@ -59,10 +55,10 @@ if __name__=="__main__":
         save=True,
         save_period=10,
         cache=False,
-        device='0',
+        device="0",
         workers=8,
-        project='RIM_results',
-        name='exp',
+        project="RIM_results",
+        name="exp",
         exist_ok=False,
         pretrained=True,
         verbose=True,
@@ -73,4 +69,4 @@ if __name__=="__main__":
         cos_lr=False,
         val=True,
         plots=True,
-        )
+    )

@@ -11,8 +11,8 @@
 # Expected gain: +16% from architecture alone
 
 # Parameters
-nc: 10  # number of classes (VisDrone)
-scales:  # model compound scaling constants
+nc: 10 # number of classes (VisDrone)
+scales: # model compound scaling constants
   # [depth, width, max_channels]
   n: [0.33, 0.25, 1024]
 
@@ -21,55 +21,55 @@ scales:  # model compound scaling constants
 # ============================================================================
 backbone:
   # [from, repeats, module, args]
-  
+
   # Stem
-  - [-1, 1, Conv, [64, 3, 2]]  # 0-P1/2
-  
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+
   # Stage 1 (P1 → P2)
-  - [-1, 1, Conv, [128, 3, 2]]  # 1-P2/4
-  - [-1, 3, C2f_SP, [128, True]]  # 2: Small-object preserving!
-  
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 3, C2f_SP, [128, True]] # 2: Small-object preserving!
+
   # Stage 2 (P2 → P3)
-  - [-1, 1, Conv, [256, 3, 2]]  # 3-P3/8
-  - [-1, 6, C2f_SP, [256, True]]  # 4: Small-object preserving!
-  
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 6, C2f_SP, [256, True]] # 4: Small-object preserving!
+
   # Stage 3 (P3 → P4)
-  - [-1, 1, Conv, [512, 3, 2]]  # 5-P4/16
-  - [-1, 6, C2f_SP, [512, True]]  # 6: Small-object preserving!
-  
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
+  - [-1, 6, C2f_SP, [512, True]] # 6: Small-object preserving!
+
   # Stage 4 (P4 → P5)
-  - [-1, 1, Conv, [1024, 3, 2]]  # 7-P5/32
-  - [-1, 3, C2f_SP, [1024, True]]  # 8: Small-object preserving!
-  
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C2f_SP, [1024, True]] # 8: Small-object preserving!
+
   # SPPF
-  - [-1, 1, SPPF, [1024, 5]]  # 9
+  - [-1, 1, SPPF, [1024, 5]] # 9
 
 # ============================================================================
 # NECK: P2-FPN with Small Object Attention
 # ============================================================================
 head:
   # Top-down FPN pathway (P5 → P4 → P3 → P2)
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 10: P5 → P4 size
-  - [[-1, 6], 1, Concat, [1]]  # 11: cat with P4
-  - [-1, 3, C2f_SP, [512]]  # 12: P4 enhanced
-  
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 13: P4 → P3 size
-  - [[-1, 4], 1, Concat, [1]]  # 14: cat with P3
-  - [-1, 3, C2f_SP, [256]]  # 15: P3 enhanced
-  
-  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]  # 16: P3 → P2 size
-  - [[-1, 2], 1, Concat, [1]]  # 17: cat with P2
-  - [-1, 3, C2f_SP, [128]]  # 18: P2 enhanced (CRITICAL for small objects!)
-  
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 10: P5 → P4 size
+  - [[-1, 6], 1, Concat, [1]] # 11: cat with P4
+  - [-1, 3, C2f_SP, [512]] # 12: P4 enhanced
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 13: P4 → P3 size
+  - [[-1, 4], 1, Concat, [1]] # 14: cat with P3
+  - [-1, 3, C2f_SP, [256]] # 15: P3 enhanced
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 16: P3 → P2 size
+  - [[-1, 2], 1, Concat, [1]] # 17: cat with P2
+  - [-1, 3, C2f_SP, [128]] # 18: P2 enhanced (CRITICAL for small objects!)
+
   # Bottom-up PAN pathway (P2 → P3 → P4)
-  - [-1, 1, Conv, [256, 3, 2]]  # 19: P2 → P3 size
-  - [[-1, 15], 1, Concat, [1]]  # 20: cat with P3
-  - [-1, 3, C2f_SP, [256]]  # 21: P3 output (stride 8)
-  
-  - [-1, 1, Conv, [512, 3, 2]]  # 22: P3 → P4 size
-  - [[-1, 12], 1, Concat, [1]]  # 23: cat with P4
-  - [-1, 3, C2f_SP, [512]]  # 24: P4 output (stride 16)
-  
+  - [-1, 1, Conv, [256, 3, 2]] # 19: P2 → P3 size
+  - [[-1, 15], 1, Concat, [1]] # 20: cat with P3
+  - [-1, 3, C2f_SP, [256]] # 21: P3 output (stride 8)
+
+  - [-1, 1, Conv, [512, 3, 2]] # 22: P3 → P4 size
+  - [[-1, 12], 1, Concat, [1]] # 23: cat with P4
+  - [-1, 3, C2f_SP, [512]] # 24: P4 output (stride 16)
+
   # Detection heads at P2, P3, P4 (strides 4, 8, 16)
   # This is the KEY difference: P2 detection for tiny objects!
-  - [[18, 21, 24], 1, Detect, [nc]]  # 25: Detect(P2, P3, P4)
+  - [[18, 21, 24], 1, Detect, [nc]] # 25: Detect(P2, P3, P4)

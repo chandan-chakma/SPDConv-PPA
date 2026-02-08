@@ -1,26 +1,29 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
+
 from .conv import Conv
 
 
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=4, bias=False):
-        super(Attention, self).__init__()
+        super().__init__()
         self.num_heads = num_heads
         self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         self.qkv = nn.Conv3d(dim, dim * 3, kernel_size=(1, 1, 1), bias=bias)
-        self.qkv_dwconv = nn.Conv3d(dim * 3, dim * 3, kernel_size=(3, 3, 3), stride=1, padding=1, groups=dim * 3,
-                                    bias=bias)
+        self.qkv_dwconv = nn.Conv3d(
+            dim * 3, dim * 3, kernel_size=(3, 3, 3), stride=1, padding=1, groups=dim * 3, bias=bias
+        )
         self.project_out = nn.Conv3d(dim, dim, kernel_size=(1, 1, 1), bias=bias)
         self.fc = nn.Conv3d(3 * self.num_heads, 9, kernel_size=(1, 1, 1), bias=True)
 
-        self.dep_conv = nn.Conv3d(9 * dim // self.num_heads, dim, kernel_size=(3, 3, 3), bias=True,
-                                  groups=dim // self.num_heads, padding=1)
+        self.dep_conv = nn.Conv3d(
+            9 * dim // self.num_heads, dim, kernel_size=(3, 3, 3), bias=True, groups=dim // self.num_heads, padding=1
+        )
 
     def forward(self, x):
-        b, c, h, w = x.shape
+        _b, _c, h, w = x.shape
         x = x.unsqueeze(2)
         qkv = self.qkv_dwconv(self.qkv(x))
         qkv = qkv.squeeze(2)
@@ -38,9 +41,9 @@ class Attention(nn.Module):
         # global SA
         q, k, v = qkv.chunk(3, dim=1)
 
-        q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v = rearrange(v, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        q = rearrange(q, "b (head c) h w -> b head c (h w)", head=self.num_heads)
+        k = rearrange(k, "b (head c) h w -> b head c (h w)", head=self.num_heads)
+        v = rearrange(v, "b (head c) h w -> b head c (h w)", head=self.num_heads)
 
         q = torch.nn.functional.normalize(q, dim=-1)
         k = torch.nn.functional.normalize(k, dim=-1)
@@ -48,9 +51,9 @@ class Attention(nn.Module):
         attn = (q @ k.transpose(-2, -1)) * self.temperature
         attn = attn.softmax(dim=-1)
 
-        out = (attn @ v)
+        out = attn @ v
 
-        out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=h, w=w)
+        out = rearrange(out, "b head c (h w) -> b (head c) h w", head=self.num_heads, h=h, w=w)
         out = out.unsqueeze(2)
         out = self.project_out(out)
         out = out.squeeze(2)
@@ -99,16 +102,15 @@ class C2f_AT(nn.Module):
         return self.cv2(torch.cat(y, 1))
 
 
-if __name__ =='__main__':
-
+if __name__ == "__main__":
     at = Attention(256)
-    #创建一个输入张量
+    # 创建一个输入张量
     batch_size = 8
-    input_tensor=torch.randn(batch_size, 256, 64, 64 )
-    #运行模型并打印输入和输出的形状
-    output_tensor =at(input_tensor)
-    print("Input shape:",input_tensor.shape)
-    print("0utput shape:",output_tensor.shape)
+    input_tensor = torch.randn(batch_size, 256, 64, 64)
+    # 运行模型并打印输入和输出的形状
+    output_tensor = at(input_tensor)
+    print("Input shape:", input_tensor.shape)
+    print("0utput shape:", output_tensor.shape)
 
 
 # # Ultralytics YOLO 🚀, AGPL-3.0 license
