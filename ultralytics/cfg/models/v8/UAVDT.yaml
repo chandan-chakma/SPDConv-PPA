@@ -1,0 +1,12 @@
+# UAVDT Dataset - VEHICLES ONLY
+path: C:/Users/Chakma/Desktop/yolov8/UAVDT-YOLO-NEW  # ← NEW PATH
+
+train: train/images
+val: val/images
+test: test/images
+
+nc: 3
+names:
+  0: car
+  1: truck
+  2: bus

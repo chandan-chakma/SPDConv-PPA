@@ -16,7 +16,16 @@ Examples:
     >>> torch.onnx.export(m, x, f)
     >>> os.system(f"onnxslim {f} {f} && open {f}")  # pip install onnxslim
 """
-
+from .PPA import *
+from .ASF import *
+from .MoCAttention import *
+from .GoldYolo import *
+from .ASFF import *
+from .SPDConv import *
+from .SwinTransformer import *
+from .msca import *
+from .msca import MSCABlock, ADAFFusion, HSFPN
+from .rim_modules import *
 from .block import (
     C1,
     C2,
@@ -179,4 +188,8 @@ __all__ = (
     "TorchVision",
     "Index",
     "A2C2f",
+    "MSCABlock",
+    "ADAFFusion",
+    "HSFPN",
+    
 )

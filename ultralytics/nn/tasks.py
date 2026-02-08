@@ -1,3 +1,4 @@
+
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import contextlib
@@ -68,6 +69,25 @@ from ultralytics.nn.modules import (
     YOLOEDetect,
     YOLOESegment,
     v10Detect,
+    MSCABlock, 
+    ADAFFusion,
+    HSFPN,
+    # RIM_C2f,
+    # AdaptiveFrequencySelection,
+    # ImplicitNeuralRepresentation,
+    # RecursiveMambaBlock,
+    # Zoom_cat,
+    # Add,
+    # ScalSeq,
+    # attention_model,
+    # PPA,C2f_PPA,
+    # SPDConv,
+    # LightweightINR,
+    # RecursiveMambaBlock, 
+    # AdaptiveFrequencyGate,
+    # C2f_RIM,
+    SPDConv
+
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, YAML, colorstr, emojis
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -93,7 +113,12 @@ from ultralytics.utils.torch_utils import (
     time_sync,
 )
 
-
+from ultralytics.change_models.MSFE import (MSFE_Module,
+        DetailPreservingDownsample,
+        PixelShuffleUpsample,
+        AdaptiveFeaturePyramid,
+        DilatedContextModule,
+        SmallObjectHead)
 class BaseModel(torch.nn.Module):
     """
     Base class for all YOLO models in the Ultralytics family.
@@ -1642,6 +1667,23 @@ def parse_model(d, ch, verbose=True):
             SCDown,
             C2fCIB,
             A2C2f,
+            DetailPreservingDownsample,
+            PixelShuffleUpsample,
+            DilatedContextModule,
+            SmallObjectHead,
+            MSCABlock, 
+            #ADAFFusion,
+            HSFPN,
+            # RIM_C2f,
+            # AdaptiveFrequencySelection,
+            # ImplicitNeuralRepresentation,
+            # RecursiveMambaBlock,
+            # LightweightINR,
+            # RecursiveMambaBlock,
+            # AdaptiveFrequencyGate,
+            # C2f_RIM,
+            SPDConv
+          
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1692,14 +1734,45 @@ def parse_model(d, ch, verbose=True):
                 legacy = False
                 if scale in "mlx":
                     args[3] = True
+            
             if m is A2C2f:
                 legacy = False
                 if scale in "lx":  # for L/X sizes
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
+     
+
         elif m is AIFI:
             args = [ch[f], *args]
+        
+        # Around line 1708-1720, replace your current RIM module parsing with:
+        # elif m in {RIM_C2f}:
+        #     c1, c2 = ch[f], args[0]
+        #     if c2 != nc:
+        #         c2 = make_divisible(min(c2, max_channels) * width, 8)
+        #     args = [c1, c2, *args[1:]]
+            
+        # elif m in {AdaptiveFrequencySelection}:
+        #     # This module only needs channels from previous layer
+        #     c2 = ch[f]  # Output channels same as input
+        #     args = [ch[f]]  # Only pass input channels
+            
+        # elif m in {ImplicitNeuralRepresentation}:
+        #     c1 = ch[f]
+        #     c2 = args[0] if args else c1
+        #     args = [c1, c2]
+            
+        # elif m in {RecursiveMambaBlock}:
+        #     c2 = ch[f]  # Output channels same as input
+        #     args = [ch[f]] + (args if args else [])
+        
+        elif m is MSFE_Module:
+            # Handle multi-scale input
+            c1 = [ch[x] for x in f] if isinstance(f, list) else [ch[f]]
+            c2 = args[0] if args else 256
+            nc_module = args[1] if len(args) > 1 else nc
+            args = [c1, nc_module]
         elif m in frozenset({HGStem, HGBlock}):
             c1, cm, c2 = ch[f], args[0], args[1]
             args = [c1, cm, c2, *args[2:]]
@@ -1712,6 +1785,11 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
+
+        elif m is ADAFFusion:
+            # ADAFFusion takes [high_res, low_res] as input
+            c2 = args[0]  # Output channels
+            args = [0, c2, *args[1:]] 
         elif m in frozenset(
             {Detect, WorldDetect, YOLOEDetect, Segment, YOLOESegment, Pose, OBB, ImagePoolingAttn, v10Detect}
         ):
@@ -1858,3 +1936,11 @@ def guess_model_task(model):
         "Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'."
     )
     return "detect"  # assume detect
+
+
+
+
+
+
+
+

@@ -711,3 +711,19 @@ class Index(nn.Module):
             (torch.Tensor): Selected tensor.
         """
         return x[self.index]
+
+class SPDConv(nn.Module):
+    """Space-to-depth layer to preserve fine-grained features for small objects."""
+    def __init__(self, dimension=1):
+        super().__init__()
+        self.d = dimension
+
+    def forward(self, x):
+        # Input: [Batch, Channel, Height, Width]
+        # Logic: Concatenate 4 sub-sampled grids into the channel dimension
+        return torch.cat([
+            x[..., ::2, ::2], 
+            x[..., 1::2, ::2], 
+            x[..., ::2, 1::2], 
+            x[..., 1::2, 1::2]
+        ], self.d)
