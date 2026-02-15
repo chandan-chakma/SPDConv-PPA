@@ -1,16 +1,13 @@
-
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ultralytics.nn.modules.conv import LightConv
-from ultralytics.utils.torch_utils import fuse_conv_and_bn
-
 
 class SpatialAttentionModule(nn.Module):
     def __init__(self):
-        super(SpatialAttentionModule, self).__init__()
+        super().__init__()
         self.conv2d = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=7, stride=1, padding=3)
         self.sigmoid = nn.Sigmoid()
 
@@ -26,30 +23,38 @@ class PPA(nn.Module):
     def __init__(self, in_features, filters) -> None:
         super().__init__()
 
-        self.skip = conv_block(in_features=in_features,
-                               out_features=filters,
-                               kernel_size=(1, 1),
-                               padding=(0, 0),
-                               norm_type='bn',
-                               activation=False)
-        self.c1 = conv_block(in_features=in_features,
-                             out_features=filters,
-                             kernel_size=(3, 3),
-                             padding=(1, 1),
-                             norm_type='bn',
-                             activation=True)
-        self.c2 = conv_block(in_features=filters,
-                             out_features=filters,
-                             kernel_size=(3, 3),
-                             padding=(1, 1),
-                             norm_type='bn',
-                             activation=True)
-        self.c3 = conv_block(in_features=filters,
-                             out_features=filters,
-                             kernel_size=(3, 3),
-                             padding=(1, 1),
-                             norm_type='bn',
-                             activation=True)
+        self.skip = conv_block(
+            in_features=in_features,
+            out_features=filters,
+            kernel_size=(1, 1),
+            padding=(0, 0),
+            norm_type="bn",
+            activation=False,
+        )
+        self.c1 = conv_block(
+            in_features=in_features,
+            out_features=filters,
+            kernel_size=(3, 3),
+            padding=(1, 1),
+            norm_type="bn",
+            activation=True,
+        )
+        self.c2 = conv_block(
+            in_features=filters,
+            out_features=filters,
+            kernel_size=(3, 3),
+            padding=(1, 1),
+            norm_type="bn",
+            activation=True,
+        )
+        self.c3 = conv_block(
+            in_features=filters,
+            out_features=filters,
+            kernel_size=(3, 3),
+            padding=(1, 1),
+            norm_type="bn",
+            activation=True,
+        )
         self.sa = SpatialAttentionModule()
         self.cn = ECA(filters)
         self.lga2 = LocalGlobalAttention(filters, 2)
@@ -114,7 +119,7 @@ class LocalGlobalAttention(nn.Module):
         # Restore shapes
         local_out = local_out.reshape(B, H // P, W // P, self.output_dim)  # (B, H/P, W/P, output_dim)
         local_out = local_out.permute(0, 3, 1, 2)
-        local_out = F.interpolate(local_out, size=(H, W), mode='bilinear', align_corners=False)
+        local_out = F.interpolate(local_out, size=(H, W), mode="bilinear", align_corners=False)
         output = self.conv(local_out)
 
         return output
@@ -122,14 +127,13 @@ class LocalGlobalAttention(nn.Module):
 
 class ECA(nn.Module):
     def __init__(self, in_channel, gamma=2, b=1):
-        super(ECA, self).__init__()
+        super().__init__()
         k = int(abs((math.log(in_channel, 2) + b) / gamma))
         kernel_size = k if k % 2 else k + 1
         padding = kernel_size // 2
         self.pool = nn.AdaptiveAvgPool2d(output_size=1)
         self.conv = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=kernel_size, padding=padding, bias=False),
-            nn.Sigmoid()
+            nn.Conv1d(in_channels=1, out_channels=1, kernel_size=kernel_size, padding=padding, bias=False), nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -141,34 +145,37 @@ class ECA(nn.Module):
 
 
 class conv_block(nn.Module):
-    def __init__(self,
-                 in_features,
-                 out_features,
-                 kernel_size=(3, 3),
-                 stride=(1, 1),
-                 padding=(1, 1),
-                 dilation=(1, 1),
-                 norm_type='bn',
-                 activation=True,
-                 use_bias=True,
-                 groups=1
-                 ):
+    def __init__(
+        self,
+        in_features,
+        out_features,
+        kernel_size=(3, 3),
+        stride=(1, 1),
+        padding=(1, 1),
+        dilation=(1, 1),
+        norm_type="bn",
+        activation=True,
+        use_bias=True,
+        groups=1,
+    ):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels=in_features,
-                              out_channels=out_features,
-                              kernel_size=kernel_size,
-                              stride=stride,
-                              padding=padding,
-                              dilation=dilation,
-                              bias=use_bias,
-                              groups=groups)
+        self.conv = nn.Conv2d(
+            in_channels=in_features,
+            out_channels=out_features,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            bias=use_bias,
+            groups=groups,
+        )
 
         self.norm_type = norm_type
         self.act = activation
 
-        if self.norm_type == 'gn':
+        if self.norm_type == "gn":
             self.norm = nn.GroupNorm(32 if out_features >= 32 else out_features, out_features)
-        if self.norm_type == 'bn':
+        if self.norm_type == "bn":
             self.norm = nn.BatchNorm2d(out_features)
         if self.act:
             # self.relu = nn.GELU()
@@ -182,6 +189,7 @@ class conv_block(nn.Module):
             x = self.relu(x)
         return x
 
+
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
     if d > 1:
@@ -189,31 +197,32 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
- 
- 
+
+
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
- 
+
     default_act = nn.SiLU()  # default activation
- 
+
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         """Initialize Conv layer with given arguments including activation."""
         super().__init__()
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False)
         self.bn = nn.BatchNorm2d(c2)
         self.act = self.default_act if act is True else act if isinstance(act, nn.Module) else nn.Identity()
- 
+
     def forward(self, x):
         """Apply convolution, batch normalization and activation to input tensor."""
         return self.act(self.bn(self.conv(x)))
- 
+
     def forward_fuse(self, x):
         """Perform transposed convolution of 2D data."""
         return self.act(self.conv(x))
 
+
 class Bottleneck(nn.Module):
     """Standard bottleneck."""
- 
+
     def __init__(self, c1, c2, shortcut=True, g=1, k=(3, 3), e=0.5):
         """Initializes a standard bottleneck module with optional shortcut connection and configurable parameters."""
         super().__init__()
@@ -221,15 +230,15 @@ class Bottleneck(nn.Module):
         self.cv1 = Conv(c1, c_, k[0], 1)
         self.cv2 = PPA(c2, c2)
         self.add = shortcut and c1 == c2
- 
+
     def forward(self, x):
         """Applies the YOLO FPN to input data."""
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
-    
- 
+
+
 class C2f_PPA(nn.Module):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
- 
+
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         """Initializes a CSP bottleneck with 2 convolutions and n Bottleneck blocks for faster processing."""
         super().__init__()
@@ -237,21 +246,15 @@ class C2f_PPA(nn.Module):
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.ModuleList(Bottleneck(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
- 
+
     def forward(self, x):
         """Forward pass through C2f layer."""
         y = list(self.cv1(x).chunk(2, 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
- 
+
     def forward_split(self, x):
         """Forward pass using split() instead of chunk()."""
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
-
-
-
-
-
